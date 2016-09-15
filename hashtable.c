@@ -208,21 +208,37 @@ hashtable_entry *hashtable_find(hashtable *ht, const char *str, int add)
 	return entry;
 }
 
-hashtable_docinfo *hashtable_append_info(hashtable *ht, hashtable_entry *entry)
+hashtable_docinfo *hashtable_append_info(hashtable *ht, hashtable_entry *entry,
+                                         unsigned int document)
 {
 	hashtable_docinfo *docinfo;
 	unsigned int d;
 
+	if (entry->docinfo) {
+		docinfo = &ht->docinfos[entry->docinfo - 1];
+		if (docinfo->document == document) {
+			return docinfo;
+		}
+	}
+
 	d = hashtable_new_docinfo(ht);
 	if (!d) return NULL;
 	docinfo = &ht->docinfos[d - 1];
-	docinfo->document = 0;
+	docinfo->document = document;
 	docinfo->count = 0;
 	docinfo->next = entry->docinfo;
 	entry->docinfo = d;
 	return docinfo;
 }
 
+void hashtable_clear(hashtable *ht)
+{
+	ht->table_used = 0;
+	ht->entries_length = 0;
+	ht->docinfos_length = 0;
+	ht->strs_length = 0;
+	memset(ht->table, 0, ht->table_size * sizeof(unsigned int));
+}
 
 unsigned long hashtable_hash(const char *str)
 {
