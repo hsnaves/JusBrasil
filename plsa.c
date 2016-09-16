@@ -151,8 +151,8 @@ double plsa_iteration(plsa *pl, docinfo *doc)
 	return likelihood / total_weight;
 }
 
-int plsa_compute(plsa *pl, docinfo *doc, unsigned int num_topics,
-                 unsigned int max_iterations, double tol)
+int plsa_train(plsa *pl, docinfo *doc, unsigned int num_topics,
+               unsigned int max_iterations, double tol)
 {
 	double likelihood, old_likelihood;
 	unsigned int iter;
@@ -259,7 +259,7 @@ int main(int argc, char **argv)
 		goto error_main;
 
 	printf("\n");
-	if (!plsa_compute(&pl, &doc, 100, 1000, 0.0001))
+	if (!plsa_train(&pl, &doc, 100, 1000, 0.0001))
 		goto error_main;
 
 	if (!plsa_print_best(&pl,  &doc, 10))

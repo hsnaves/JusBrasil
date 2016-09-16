@@ -20,8 +20,8 @@ void plsa_reset(plsa *pl);
 int plsa_initialize(plsa *pl);
 void plsa_cleanup(plsa *pl);
 
-int plsa_compute(plsa *pl, docinfo *doc, unsigned int num_topics,
-                 unsigned int max_iterations, double tol);
+int plsa_train(plsa *pl, docinfo *doc, unsigned int num_topics,
+               unsigned int max_iterations, double tol);
 int plsa_print_best(plsa *pl, docinfo *doc, unsigned top_words);
 
 #endif /* __PLSA_H */

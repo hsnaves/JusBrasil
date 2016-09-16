@@ -21,5 +21,8 @@ void *xmalloc(size_t size);
 void *xrealloc(void *ptr, size_t size);
 char *xstrdup(const char *str);
 
+void xsort(void *ptr, size_t nmemb, size_t size,
+           int (*cmpfunc)(const void *, const void *, void *), void *arg);
+
 #endif /* __UTILS_H */
 
