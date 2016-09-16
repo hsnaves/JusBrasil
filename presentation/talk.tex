@@ -1,0 +1,612 @@
+\documentclass{beamer}
+\mode<article> % only for the article version
+{
+  \usepackage{fullpage}
+  \usepackage{hyperref}
+}
+
+%\setbeamercovered{dynamic}
+\mode<presentation> {
+  \usetheme{Warsaw}
+  %\usecolortheme{seagull}
+  \usefonttheme[onlysmall]{structurebold}
+}
+
+%\usepackage{beamerthemesplit}
+\usepackage{beamerthemeshadow}
+\usepackage{graphicx}
+\usepackage{tikz}
+
+\usepackage[brazilian]{babel}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+
+\setbeamertemplate{headline}{}
+\setbeamertemplate{navigation symbols}{}
+
+%%% Theorem environments
+%\newtheorem{theorem}{Theorema}[section]
+%\newtheorem{proposition}[theorem]{Proposição}
+%\newtheorem{lemma}[theorem]{Lema}
+%\newtheorem{claim}[theorem]{Afirmação}
+%\newtheorem{corollary}[theorem]{Corolário}
+%\newtheorem{observation}[theorem]{Observação}
+%\newtheorem{example}[theorem]{Exemplo}
+%\newtheorem{conjecture}[theorem]{Conjectura}
+%\newtheorem{definition}[theorem]{Definição}
+%\newtheorem{problem}[theorem]{Problema}
+
+
+\newcommand{\N}{\mathbb{N}}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\Bin}{\textup{Bin}}
+\newcommand{\eps}{\varepsilon}
+\newcommand{\mc}[1]{\mathcal #1}
+\newcommand{\Prob}{\mathbb{P}}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\rt}{\right}
+\newcommand{\lt}{\left}
+
+\DeclareMathOperator*{\argmin}{arg\,min}
+\DeclareMathOperator*{\argmax}{arg\,max}
+
+
+
+\title{Algoritmo de Maximização da Expectativa (EM) e Aplicações}
+\author{Humberto Naves}
+
+
+\date{Salvador - BA, 16 de Setembro de 2016}
+
+
+\begin{document}
+
+\maketitle
+
+
+\section{Introdução}
+\begin{frame}
+
+	\frametitle{Um experimento}
+	\begin{block}{Problema}
+		Considere o seguinte experimento com uma moeda viesada. \pause
+		Ao lançar a moeda, a probabilidade de dar caras (H) é $\theta$,
+		enquanto a probabilidade de dar coroas (T) é $1-\theta$,
+		onde $\theta$ é um parâmetro desconhecido. \pause Isto é
+		\[
+			\Prob[C=H] = \theta, \quad \Prob[C=T]=1-\theta.
+		\]
+		\pause
+		Digamos que foram realizados $50$ lançamentos (independentes), dos
+		quais $37$ deram cara e o restante coroa. Como estimar $\theta$
+		e qual o valor de $\theta$ que faz ``sentido''?
+	\end{block}
+
+
+\end{frame}
+
+\begin{frame}
+
+	\frametitle{Máxima verossimilhança}
+	A resposta intuitiva é $\theta = \frac{37}{50} = 74\%$.
+	\pause
+	\begin{alertblock}{Idéia}
+		Usar o estimador de máxima verossimilhança (maximum-likelihood
+		estimator, MLE).
+	\end{alertblock}
+	\pause
+	\begin{exampleblock}{Exemplo simples}
+		Se foram realizados $4$ lançamentos, digamos $HTHH$
+		\begin{align*}
+			P &= \Prob[C=H]\cdot\Prob[C=T]\cdot \Prob[C=H]\cdot Prob[C=H]\\
+			&= \theta \cdot (1-\theta) \cdot \theta \cdot \theta \\
+			&= \theta^3 \cdot (1-\theta)^1.
+		\end{align*}
+	\end{exampleblock}
+
+\end{frame}
+
+\begin{frame}
+
+	\frametitle{Máxima verossimilhança}
+	No caso anterior, suponde que as moedas lançadas deram $C_1,\ldots,C_{50}$,
+	onde $C_i \in \{H, T\}$, e $i\in \{1,2,\ldots, 50\}$. \pause
+	Como $37$ dos $50$ lançamentos deram cara, nós temos
+	\[
+	  P = \prod_{i=1}^{50} \Prob[C = C_i] = \theta^{37}(1-\theta)^{13}.
+	\]
+	\pause
+	Portanto
+	\[
+	  L = \log P = \sum_{i=1}^{50} \log \Prob[C=C_i] = 37 \log(\theta)
+	  +13 \log(1-\theta).
+	\]
+	\pause
+	Com um pouco de cálculo, obtemos
+	\[
+	\frac{d L}{d \theta} = \frac{37}{\theta} - \frac{13}{1-\theta} = 0,
+	\]
+	\pause
+	portanto $\theta = \frac{37}{50}$. \pause
+	A resposta intuitiva é a que maximiza a verossimilhança!
+
+\end{frame}
+
+\begin{frame}
+
+	\frametitle{Segundo experimento}
+	\begin{block}{Segundo experimento}
+	Digamos que agora tenhamos $2$ moedas, $A$ e $B$, de vieses $\theta_A$
+	e $\theta_B$ respectivamente. Nosso objetivo é estimar $\theta=(\theta_A,
+	\theta_B)$ usando o resultado do seguinte procedimento de amostragem:
+	\pause
+	\medskip
+	Repita $5$ vezes:
+	\begin{itemize}
+		\item escolha uma moeda ($A$ ou $B$) aleatoriamente (com escolhas
+		independentes) e a lance $10$ vezes consecutivas (lançamentos
+		independentes).
+	\end{itemize}
+	\end{block}
+	\pause
+	Coletamos $x=(x_1,\ldots, x_5)$ e $z=(z_1,\ldots, z_5)$, onde
+	\begin{itemize}
+		\item $x_i\in \{0,1,\ldots, 10\}$ conta o número de caras
+		dos $10$ lançamentos da $i$-ésima iteração do procedimento;
+		\pause
+		\item $z_i\in \{A,B\}$ contém a identidade da moeda de tais
+		lançamentos;
+	\end{itemize}
+
+\end{frame}
+
+\begin{frame}
+
+	\frametitle{MLE revisitado}
+	Se tivermos acesso ao vetor $z$, fica fácil estimar $\theta_A$ e $\theta_B$
+	usando o MLE.
+	\pause
+	\begin{align*}
+	  \theta_A &= \frac{\# \text{ de caras usando a moeda } A}{
+	  	                \# \text{de lançamentos usando a moeda } A} \\
+	  \theta_B &= \frac{\# \text{ de caras usando a moeda } B}{
+	  	\# \text{de lançamentos usando a moeda } B}
+	\end{align*}
+	\pause
+
+	\bigskip
+	Matematicamente, estamos estimando
+	\[
+	  \argmax_{\theta} \log \Prob[x|z; \theta].
+	\]
+
+\end{frame}
+
+\begin{frame}
+
+	\frametitle{Exemplo usando MLE}
+	\begin{exampleblock}{Exemplo}
+		\begin{center}
+			\begin{tabular}{l | c | c }
+			Lançamentos & Moeda $A$ & Moeda $B$ \\
+			\hline
+			$B\to HTTTHHTHTH$	 & & $5H, 5T$ \\
+			$A\to HHHHTHHHHH$ & $9H, 1T$ & \\
+			$A\to HTHHHHHTHH$ & $8H, 2T$ & \\
+			$B\to HTHTTTHHTT$ & & $4H, 6T$ \\
+			$A\to THHHTHHHTH$ & $7H, 3T$ & \\
+			\hline
+			& $24H, 6T$ & $9H, 11T$\\
+			\end{tabular}
+		\end{center}
+	\end{exampleblock}
+	\pause
+	Usando MLE obtemos:
+	\[
+		\theta_A = \frac{24}{30} = 0.8,
+		\quad \theta_B = \frac{9}{20} = 0.45
+	\]
+
+\end{frame}
+
+\begin{frame}
+
+	\frametitle{Maximização da escolha}
+	Mas e se não tivermos acesso a $z$ (isto é $z$ é latente)?
+	\pause
+	\begin{alertblock}{Idéia}
+		Que tal ``completar'' ou ``adivinhar'' o $z$?
+	\end{alertblock}
+	\pause
+	\begin{block}{Solução iterativa}
+		\begin{itemize}
+		\item Comece com uma estimativa inicial arbitrária $\theta^{(0)}$
+		para $\theta$. \pause
+		\item Agora repita para $t=0,1,\ldots$ até convergir. \pause
+			\begin{itemize}
+				\item Dado uma estimativa $\theta^{(t)}$, adivinhe o valor
+				de $z$ usando o valor mais provável, assim obtendo
+				$z^{(t)}$. \pause
+				Por exemplo, se $\theta^{(t)}_A = 0.3$, $\theta^{(t)}_B=0.8$
+				e $x_1 = 7$, então é mais provável que $z_1 = B$. \pause
+				\item Assumindo a corretude de $z^{(t)}$, estimamos o
+				novo valor de $\theta$, obtendo $\theta^{(t+1)}$
+			\end{itemize}
+		\end{itemize}
+	\end{block}
+	\pause
+	Chamaremos este algoritmo de maximização da escolha (CM).
+
+\end{frame}
+
+\begin{frame}
+	
+	\frametitle{Maximização da escolha}
+	Começamos com chute inicial $\theta^{(0)}_A = 0.9$,
+	$\theta^{(0)}_B = 0.6$ (é bom que sejam valores diferentes para a quebra
+	de simetria)
+	\begin{block}{Iteração 1}
+		\begin{enumerate}
+		\item $5H, 5T$\pause $\to B$;\pause
+		\item $9H, 1T$\pause $\to A$;\pause
+		\item $8H, 2T$\pause $\to A$;\pause
+		\item $4H, 6T$\pause $\to B$;\pause
+		\item $7H, 3T$\pause $\to B$;\pause
+		\end{enumerate}
+	\end{block}
+	Obtemos:
+	\[
+		\theta^{(1)}_A = \frac{17}{20}=0.85\quad
+		\theta^{(1)}_B = \frac{16}{30}\simeq 0.53
+	\]
+
+\end{frame}
+
+\begin{frame}
+	
+	\frametitle{Maximização da escolha}
+	Temos $\theta^{(1)}_A = 0.85$ e
+	$\theta^{(1)}_B = 0.53$
+	\begin{block}{Iteração 2}
+		\begin{enumerate}
+			\item $5H, 5T$\pause $\to B$;\pause
+			\item $9H, 1T$\pause $\to A$;\pause
+			\item $8H, 2T$\pause $\to A$;\pause
+			\item $4H, 6T$\pause $\to B$;\pause
+			\item $7H, 3T$\pause $\to A$;\pause
+		\end{enumerate}
+	\end{block}
+	Obtemos:
+	\[
+	\theta^{(2)}_A = \frac{24}{30}=0.8\quad
+	\theta^{(2)}_B = \frac{9}{20}=0.45
+	\]
+	
+\end{frame}
+
+\begin{frame}
+	
+	\frametitle{Maximização da Expectativa}
+	\begin{itemize}
+		\item O algoritmo de Maximização da Expectativa é uma versão mais
+		sofisticada	da idéia anterior. \pause
+		\item Ao invés de escolher somente o $z$ mais provável em cada
+		iteração, podemos usar todos os possíveis valores de $z$, ponderados
+		pela probabilidade (a posteriori) desses valores, que pode
+		ser calculada usando o teorema de Bayes. \pause
+		\item Finalmente, uma versão modificada do MLE é usada, obtendo
+		assim novas estimativas para $\theta$.
+	\end{itemize}
+
+\end{frame}
+
+\begin{frame}
+
+	\frametitle{Maximização da Expectativa}
+	No nosso experimento, temos:
+	\pause
+	\begin{align*}
+	\Prob[Z=A] = \Prob[Z=B] &= \frac12 \\
+	\Prob[X=k|Z=A] &= \binom{10}{k}\theta_A^k(1-\theta_A)^{10-k} \\
+	\Prob[X=k|Z=B] &= \binom{10}{k}\theta_B^k(1-\theta_B)^{10-k} \\
+	\end{align*}
+	\pause
+	Pelo teorema de Bayes:
+	\begin{align*}
+	\Prob[Z=A|X=k] &= \frac{\Prob[X=k|Z=A]\cdot \Prob[Z=A]}{\Prob[X=k]} \\
+	 &= \frac{\theta_A^{k}(1-\theta_A)^{10-k}}{
+	 	\theta_A^{k}(1-\theta_A)^{10-k} + \theta_B^{k}(1-\theta_B)^{10-k}}
+	\end{align*}
+
+\end{frame}
+
+\begin{frame}
+
+	\frametitle{EM aplicado ao exemplo}
+	Começamos com chute inicial $\theta^{(0)}_A = 0.6$ e
+	$\theta^{(0)}_B = 0.5$.\pause
+	\begin{block}{Iteração 1}
+		\begin{center}
+			\begin{tabular}{l | c | c | c | c}
+				& Prob. $A$ & Prob. $B$ &
+				Moedas $A$ & Moedas $B$ \\
+				\hline
+				$5H, 5T$ & 0.45 & 0.55
+				& $\simeq 2.2H, 2.2T$ & $\simeq 2.8H, 2.8T$ \\
+				$9H, 1T$ & 0.80 & 0.20
+				& $\simeq 7.2H, 0.8T$ & $\simeq 1.8H, 0.2T$ \\
+				$8H, 2T$ & 0.73 & 0.27
+				& $\simeq 5.9H, 1.5T$ & $\simeq 2.1H, 0.5T$ \\
+				$4H, 6T$ & 0.35 & 0.65
+				& $\simeq 1.4H, 2.1T$ & $\simeq 2.6H, 3.9T$ \\
+				$7H, 3T$ & 0.65 & 0.35
+				& $\simeq 4.5H, 1.9T$ & $\simeq 2.5H, 1.1T$ \\
+				\hline
+				&  &  &$\simeq 21.3H, 8.6T$ & $\simeq 11.7H, 8.4T$
+			\end{tabular}
+		\end{center}
+	\end{block}
+	\pause
+	Obtemos:
+	\[
+	\theta^{(1)}_A \simeq \frac{21.3}{21.3+8.6} \simeq 0.71,
+	\quad \theta^{(1)}_B \simeq \frac{11.7}{11.7+8.4} \simeq 0.58
+	\]
+	\pause
+	Repetindo $10$ vezes, obtemos:
+	$\theta^{(10)}_A\simeq 0.8$ e $\theta^{(10)}_B\simeq 0.52$.
+\end{frame}
+
+\section{Algorithmo EM}
+
+\begin{frame}
+
+	\frametitle{Formalização matemática}
+	\begin{itemize}
+		\item Suponha que tenhamos um modelo estatísticos que gera 
+		a variável $X$ (observável) e uma variável latente $Z$ (não-observável).
+		\pause
+		\item Suponha também que este modelo dependa de um parâmetro
+		desconhecido $\theta$. \pause
+		\item Definimos a função de verossimilhança:
+		\[
+		 L(X,Z;\theta) = \log \Prob[X,Z;\theta],
+		\]
+		\pause
+		e similarmente:
+		\[
+		L(X;\theta) = \log \Prob[X;\theta] = \log\lt(\sum_{Z}
+		\Prob[X,Z;\theta]\rt).
+		\]
+	\end{itemize}
+
+\end{frame}
+
+\begin{frame}
+	
+	\frametitle{Formalização matemática}
+	\begin{itemize}
+	\item
+	Dado um conjunto de amostras $\{x_1,\ldots, x_n\}$ de $X$
+	o algoritmo EM obtem um sequência de aproximações $\theta^{(0)},
+	\theta^{(1)},\ldots,\theta^{(t)},\ldots$, cada vez melhorando
+	a estimativa de $\theta$ de forma a maximizar
+	\[
+	f(\theta) = \sum_{x\in\text{Amostras}} L(X=x;\theta).
+	\]
+	\pause
+	\item Cada iteração do algoritmo começa com uma aproximação $\theta^{(t)}$
+	e obtem uma melhor aproximação $\theta^{(t+1)}$ através de dois passos:
+	\textbf{passo E} e \textbf{passo M}.
+	\end{itemize}
+
+\end{frame}
+
+\begin{frame}
+	
+	\frametitle{Formalização matemática}
+	\begin{itemize}
+		\item
+		\textbf{Passo E}: Ache o valor esperado da verossimilhança
+		$L(X,Z;\theta)$ com respeito a distribuição condicional de $Z$ dado o
+		valor observado de $X$ para o parâmetro $\theta = \theta^{(t)}$.
+		\pause
+		\[
+		Q(\theta; \theta^{(t)}):= \E_{Z|X;\theta^{(t)}}\lt[
+		L(X,Z;\theta)\rt].
+		\]
+		\pause
+		\item
+		\textbf{Passo M}: ache o máximo de $Q(\theta;\theta^{(t)})$
+		\[
+		  \theta^{(t+1)}=\argmax_{\theta} Q(\theta;\theta^{(t)}).
+		\]
+	\end{itemize}
+
+\end{frame}
+
+\section{Aplicações}
+\begin{frame}
+	
+	\frametitle{Algoritmo $k$-means}
+	\pause
+	\begin{itemize}
+		\item O algoritmo $k$-means é um algoritmo de clusterização que
+		objetiva particionar $n$ observações dentre $k$ grupos de observações
+		semelhantes; \pause
+		\item Formalmente, se é dado um conjunto $\{x_1,\ldots, x_n\}\subseteq
+		\R^d$, e o objetivo é particionar este conjunto em uma partição
+		$S=\{S_1,\ldots, S_k\}$ de forma a minimizar a soma dos quadrados
+		das distâncias dentro de cada cluster. \pause
+		\[
+		\argmin_{S,\mu} \sum_{i=1}^k \sum_{x\in S_i} \|x-\mu_i\|^2.
+		\]
+	\end{itemize}
+
+\end{frame}
+
+\begin{frame}
+	
+	\frametitle{Algoritmo $k$-means}
+	\begin{block}{Algoritmo $k$-means}
+	\begin{itemize}
+		\item Inicialmente escolha uma partição $S^{(0)}$ arbitrariamente.
+		\pause
+		\item Repita para $t=0,1,\ldots$ até convergir:
+		\pause
+		\begin{itemize}
+			\item Da partição $S^{(t)}$, construa o vetor $\mu^{(t)}$ onde
+			\[
+			\mu^{(t)}_i = \frac{1}{|S^{(t)}_i|} \cdot
+			\sum_{x\in S^{(t)}_i} x,
+			\]
+			é o centróide da $i$-ésima parte da partição $S^{(t)}$.\pause
+			\item Dos centróides $\mu^{(t)}$, construa uma nova partição
+			$S^{(t+1)}$ da seguinte forma: \pause para cada ponto $x$,
+			descubra o centróide mais próximo de $x$, digamos $\mu^{(t)}_i$,
+			e coloque $x$ em $S^{(t+1)}_i$;
+		\end{itemize}
+	\end{itemize}
+	\end{block}
+
+\end{frame}
+
+\begin{frame}
+
+	\frametitle{Algoritmo $k$-means}
+	
+	O algoritmo $k$-means é um instância de CM!
+
+	\bigskip
+	\pause
+	Considere o seguinte modelo estatístico, com parâmetros
+	$q=(q_1,\ldots, q_k)\in \R^k$, e $\mu=(\mu_1,\ldots,\mu_k)
+	\in (\R^d)^k$.\pause
+	\begin{itemize}
+		\item $Z$ é uma variável discreta, $Z\in \{1,\ldots, k\}$
+		\[
+		\Prob[Z=j] = q_j.
+		\]
+		\pause
+		\item Dado que $Z=j$, $X$ é uma variável gaussiana multidimensional
+		padrão (variância sendo a matrix identidade) e com valor médio
+		\[
+		  \E[X|Z=j] = \mu_j.
+		\]
+	\end{itemize}
+\end{frame}
+
+\begin{frame}
+	
+	\frametitle{Algoritmo $k$-means}
+	\begin{block}{Problema}
+		Suponha que $\{x_1,\ldots, x_n\}$ são as amostras geradas por
+		esse modelo (assuma que $z_i$'s são variáveis latentes). Como
+		estimar $q$ e $\mu$?
+	\end{block}
+	\pause
+	\begin{alertblock}{Idéia}
+		Aplicar CM. Começamos com um chute inicial para $\mu^{(0)}$ e
+		repetimos para $t=0,1,\ldots$ até convergir.
+		\pause
+		\begin{itemize}
+			\item Com $\mu^{(t)}$, estimamos o valor mais provável das variáveis
+			$z_i$'s. \pause Por exemplo $z_i=j$ se $\mu^{(t)}_j$ for o
+			centróide mais próximo de $x_i$. \pause
+			\item Com os $z_i$'s podemos recalcular os $q_j$'s e obter
+			$q^{(t)}$. \pause
+			\item Com os $z_i$'s podemos recalcular os $\mu_j$'s utilizando
+			máxima verossimilhança e obter a mesma fórmula do $k$-means
+			para obter $\mu^{(t+1)}$.
+		\end{itemize}
+	\end{alertblock}
+
+\end{frame}
+
+\begin{frame}
+	
+	\frametitle{Análise semântica probabilística latente (PLSA/PLSI)}
+	\pause
+	\begin{itemize}
+		\item Considere o seguinte modelo estatístico para geração de palavras
+		em um documento.
+
+		\begin{figure}[ht!]
+			\centering
+			\begin{tikzpicture}
+			[scale=0.8, auto=left, every node/.style={circle, draw,
+				minimum width=20pt}]
+			\node (n1) at ( -4, 0 cm) {$d$};
+			\node (n2) at (  0, 0 cm) {$c$};
+			\node (n3) at (  4, 0 cm) {$w$};
+			\foreach \from/\to in {n1/n2, n2/n3}
+				\draw[->] (\from) -- (\to);
+			\end{tikzpicture}
+			\caption{Diagrama de geração de palavras}
+		\end{figure}
+		\pause
+		\item Cada documento $d$ possui uma distribuição de tópicos
+		$\Prob[c|d]$, e para cada tópico $c$ há uma distribuição de 
+		palavras $\Prob[w|c]$. \pause
+		\[
+			\Prob[w|d] = \sum_{c} \Prob[w|c]\cdot \Prob[c|d]
+		\]
+		\pause
+		\item Neste caso a variável $c$ é latente, e assumimos a independência
+		de $w$ e $d$ quando condicionado a $c$.
+	
+	\end{itemize}
+\end{frame}
+
+\begin{frame}
+
+	\frametitle{Análise semântica probabilística latente (PLSA/PLSI)}
+	\begin{itemize}
+	\item Este modelo pode ser usado pelo EM para estimar os parâmetros
+	$P[w|c]$ (uma matriz $W\times C$), e $P[c|d]$ (uma matriz $C\times D$),
+	onde: \pause
+	\begin{align*}
+	W&= \# \text{ de palavras} \\
+	C&= \# \text{ de tópicos} \\
+	D&= \# \text{ de documentos}.
+	\end{align*}
+	\pause
+	\item Similarmente, para usuários e items:
+	\[
+	  \Prob[s|u] = \sum_{c} \Prob[c|u] \cdot \Prob[s|u],
+	\]
+	\pause
+	portanto o PLSI pode ser usado em sistemas de recomendação.
+	\end{itemize}
+
+\end{frame}
+
+\section{Conclusão}
+\begin{frame}
+	\frametitle{Conclusão}
+	O algoritmo EM pode é amplamente utilizado em diferentes contextos:
+	\begin{itemize}
+		\item Data clustering (e.g., $k$-means).\pause
+		\item Sistemas de recomendação (e.g., PLSI). \pause
+		\item Em processamento de linguagem natural. \pause
+		Por exemplo o famoso algoritmo de Baulm-Welch para treinar uma
+		cadeia oculta de Markov.
+		\pause
+		\item Para treinar diversos modelos probabilísticos em
+		biologia computacional.
+	\end{itemize}
+
+\end{frame}
+
+\begin{frame}
+
+  \begin{figure}[ht!]
+    \centering
+    \includegraphics[height=7cm]{thank-you.jpg}
+  \end{figure}
+
+
+\end{frame}
+
+
+\end{document}
