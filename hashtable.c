@@ -138,29 +138,24 @@ unsigned int hashtable_new_str(hashtable *ht, const char *str)
 static
 int hashtable_rehash(hashtable *ht)
 {
-	unsigned int i, j, k, idx;
+	unsigned int i, idx;
 	unsigned int new_size, *new_table;
 	hashtable_entry *entry;
 
 	new_size = 2 * ht->table_size;
 	new_table = (unsigned int *) xmalloc(new_size * sizeof(unsigned int));
 	if (!new_table) return FALSE;
-
-	memset(new_table, 0, new_size * sizeof(unsigned int));
-	for (i = 0; i < ht->table_size; i++) {
-		j = ht->table[i];
-		while (j) {
-			entry = &ht->entries[j - 1];
-			k = entry->next;
-			idx = (entry->hash % new_size);
-			entry->next = new_table[idx];
-			new_table[idx] = j;
-			j = k;
-		}
-	}
 	free(ht->table);
+
 	ht->table = new_table;
 	ht->table_size = new_size;
+	memset(new_table, 0, new_size * sizeof(unsigned int));
+	for (i = 0; i < ht->entries_length; i++) {
+		entry = &ht->entries[i];
+		idx = (entry->hash % new_size);
+		entry->next = new_table[idx];
+		new_table[idx] = i + 1;
+	}
 	return TRUE;
 }
 
@@ -206,6 +201,12 @@ hashtable_entry *hashtable_find(hashtable *ht, const char *str, int add)
 	ht->table_used++;
 
 	return entry;
+}
+
+const char *hashtable_str(hashtable *ht, hashtable_entry *entry)
+{
+	if (!entry->str) return NULL;
+	return &ht->strs[entry->str - 1];
 }
 
 hashtable_docinfo *hashtable_append_info(hashtable *ht, hashtable_entry *entry,

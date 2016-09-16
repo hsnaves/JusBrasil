@@ -14,11 +14,10 @@ struct plsa_st {
 	reader r;
 	hashtable ht;
 	hashtable ignored;
-	unsigned int *str_idx;
 	unsigned int *word_count;
+	unsigned int *topmost;
 	double *dt, *tw;
 	double *dt2, *tw2;
-	unsigned int *topmost;
 } plsa;
 
 /* Functions */

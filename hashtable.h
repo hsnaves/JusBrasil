@@ -38,6 +38,7 @@ int hashtable_initialize(hashtable *ht);
 void hashtable_cleanup(hashtable *ht);
 
 hashtable_entry *hashtable_find(hashtable *ht, const char *str, int add);
+const char *hashtable_str(hashtable *ht, hashtable_entry *entry);
 hashtable_docinfo *hashtable_append_info(hashtable *ht, hashtable_entry *entry,
                                          unsigned int document);
 void hashtable_clear(hashtable *ht);

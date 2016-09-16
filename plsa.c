@@ -15,7 +15,6 @@ void plsa_reset(plsa *pl)
 	hashtable_reset(&pl->ht);
 	hashtable_reset(&pl->ignored);
 	reader_reset(&pl->r);
-	pl->str_idx = NULL;
 	pl->word_count = NULL;
 	pl->dt = NULL;
 	pl->dt2 = NULL;
@@ -62,13 +61,18 @@ void plsa_cleanup_tables(plsa *pl)
 static
 void plsa_cleanup_stats(plsa *pl)
 {
-	if (pl->str_idx) {
-		free(pl->str_idx);
-		pl->str_idx = NULL;
-	}
 	if (pl->word_count) {
 		free(pl->word_count);
 		pl->word_count = NULL;
+	}
+}
+
+static
+void plsa_cleanup_temporary(plsa *pl)
+{
+	if (pl->topmost) {
+		free(pl->topmost);
+		pl->topmost = NULL;
 	}
 }
 
@@ -79,11 +83,7 @@ void plsa_cleanup(plsa *pl)
 	reader_cleanup(&pl->r);
 	plsa_cleanup_tables(pl);
 	plsa_cleanup_stats(pl);
-
-	if (pl->topmost) {
-		free(pl->topmost);
-		pl->topmost = NULL;
-	}
+	plsa_cleanup_temporary(pl);
 }
 
 void plsa_clear_ignored(plsa *pl)
@@ -98,7 +98,7 @@ int plsa_add_ignored(plsa *pl, const char *word)
 
 int plsa_process_files(plsa *pl, const char *directory, unsigned int num_files)
 {
-	unsigned int i, j, e;
+	unsigned int i;
 	char old_dir[PATH_MAX];
 	char filename[PATH_MAX];
 	hashtable_entry *entry;
@@ -152,23 +152,7 @@ int plsa_process_files(plsa *pl, const char *directory, unsigned int num_files)
 
 	printf("Done reading!\n");
 	pl->num_documents = num_files;
-	pl->num_words = pl->ht.table_used;
-
-	size = pl->num_words * sizeof(unsigned int);
-	pl->str_idx = (unsigned int *) xmalloc(size);
-	if (!pl->str_idx) goto error_process;
-
-	j = 0;
-	for (i = 0; i < ht->table_size; i++) {
-		e = ht->table[i];
-		while (e) {
-			entry = &ht->entries[e - 1];
-			pl->str_idx[j++] = entry->str;
-			e = entry->next;
-		}
-	}
-	printf("j = %u\n", j);
-	printf("num_Words = %u\n", pl->num_words);
+	pl->num_words = ht->entries_length;
 
 	if (chdir(old_dir) < 0) {
 		error("could not change directory back to `%s'", old_dir);
@@ -217,7 +201,7 @@ void plsa_initialize_random(plsa *pl)
 static
 double plsa_iteration(plsa *pl)
 {
-	unsigned int i, j, k, l, e, doc;
+	unsigned int i, j, k, doc;
 	unsigned pos, pos2;
 	double tmp, den, likelihood, total_weight;
 	hashtable *ht;
@@ -236,47 +220,41 @@ double plsa_iteration(plsa *pl)
 	likelihood = 0;
 	total_weight = 0;
 	ht = &pl->ht;
-	j = 0;
-	for (i = 0; i < ht->table_size; i++) {
-		e = ht->table[i];
-		while (e) {
-			entry = &ht->entries[e - 1];
-			doc = entry->docinfo;
-			while (doc) {
-				docinfo = &ht->docinfos[doc - 1];
-				k = docinfo->document - 1;
-				tmp = 0;
-				for (l = 0; l < pl->num_topics; l++) {
-					pos = k * pl->num_topics + l;
-					pos2 = l * pl->num_words + j;
-					tmp += pl->dt2[pos] * pl->tw2[pos2];
-				}
-				likelihood += docinfo->count * log(tmp);
-				total_weight += docinfo->count;
-				den = tmp * pl->word_count[k];
-
-				for (l = 0; l < pl->num_topics; l++) {
-					pos = k * pl->num_topics + l;
-					pos2 = l * pl->num_words + j;
-					pl->dt[pos] += docinfo->count
-					  * pl->dt2[pos] * pl->tw2[pos2] / den;
-					pl->tw[pos2] += docinfo->count
-					  * pl->dt2[pos] * pl->tw2[pos2] / tmp;
-				}
-				doc = docinfo->next;
+	for (i = 0; i < pl->num_words; i++) {
+		entry = &ht->entries[i];
+		doc = entry->docinfo;
+		while (doc) {
+			docinfo = &ht->docinfos[doc - 1];
+			k = docinfo->document - 1;
+			tmp = 0;
+			for (j = 0; j < pl->num_topics; j++) {
+				pos = k * pl->num_topics + j;
+				pos2 = j * pl->num_words + i;
+				tmp += pl->dt2[pos] * pl->tw2[pos2];
 			}
-			e = entry->next;
-			j++;
+			likelihood += docinfo->count * log(tmp);
+			total_weight += docinfo->count;
+			den = tmp * pl->word_count[k];
+
+			for (j = 0; j < pl->num_topics; j++) {
+				pos = k * pl->num_topics + j;
+				pos2 = j * pl->num_words + i;
+				pl->dt[pos] += docinfo->count
+				  * pl->dt2[pos] * pl->tw2[pos2] / den;
+				pl->tw[pos2] += docinfo->count
+				  * pl->dt2[pos] * pl->tw2[pos2] / tmp;
+			}
+			doc = docinfo->next;
 		}
 	}
-	for (l = 0; l < pl->num_topics; l++) {
+	for (j = 0; j < pl->num_topics; j++) {
 		tmp = 0;
-		for (j = 0; j < pl->num_words; j++) {
-			pos2 = l * pl->num_words + j;
+		for (i = 0; i < pl->num_words; i++) {
+			pos2 = j * pl->num_words + i;
 			tmp += pl->tw[pos2];
 		}
-		for (j = 0; j < pl->num_words; j++) {
-			pos2 = l * pl->num_words + j;
+		for (i = 0; i < pl->num_words; i++) {
+			pos2 = j * pl->num_words + i;
 			pl->tw[pos2] /= tmp;
 		}
 	}
@@ -323,12 +301,11 @@ int plsa_compute(plsa *pl, unsigned int num_topics,
 int plsa_print_best(plsa *pl, unsigned top_words)
 {
 	unsigned int i, j, l, tmp;
+	hashtable_entry *entry;
 	size_t size;
 
-	if (pl->topmost) {
-		free(pl->topmost);
-		pl->topmost = NULL;
-	}
+	plsa_cleanup_temporary(pl);
+
 	size = pl->num_words * sizeof(unsigned int);
 	pl->topmost = (unsigned int *) xmalloc(size);
 	if (!pl->topmost) return FALSE;
@@ -354,8 +331,9 @@ int plsa_print_best(plsa *pl, unsigned top_words)
 		}
 		printf("\nTopic %d:\n", l + 1);
 		for (j = 0; j < top_words; j++) {
+			entry = &pl->ht.entries[pl->topmost[j]];
 			printf("%s: %g\n",
-			       &pl->ht.strs[pl->str_idx[pl->topmost[j]] - 1],
+			       hashtable_str(&pl->ht, entry),
 			       pl->tw2[pl->topmost[j]]);
 		}
 	}
