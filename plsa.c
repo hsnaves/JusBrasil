@@ -104,6 +104,7 @@ int plsa_process_files(plsa *pl, const char *directory, unsigned int num_files)
 	docinfo_clear(doc);
 	reader_close(&pl->r);
 
+	printf("Reading documents... ");
 	for (i = 0; i < num_files; i++) {
 		sprintf(filename, "file_%d.txt", i + 1);
 		if (access(filename, F_OK) == -1)
@@ -125,9 +126,13 @@ int plsa_process_files(plsa *pl, const char *directory, unsigned int num_files)
 		reader_close(&pl->r);
 	}
 
-	printf("Done reading!\n");
+	printf("done reading!\n");
 	pl->num_documents = docinfo_num_documents(doc);
 	pl->num_words = docinfo_num_different_words(doc);
+	printf("Num documents: %u\n", pl->num_documents);
+	printf("Num different words: %u\n", pl->num_words);
+	printf("Num wordstats: %u\n", docinfo_num_wordstats(doc));
+	printf("Total word count: %u\n", docinfo_num_words(doc));
 
 	if (chdir(old_dir) < 0) {
 		error("could not change directory back to `%s'", old_dir);
