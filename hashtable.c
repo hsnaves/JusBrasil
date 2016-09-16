@@ -189,7 +189,7 @@ unsigned int hashtable_get_entry_idx(hashtable *ht, hashtable_entry *entry)
 {
 	ptrdiff_t diff;
 	diff = entry - ht->entries;
-	return 1 + (unsigned int) (diff / sizeof(hashtable_entry));
+	return 1 + (unsigned int) (((size_t) diff) / sizeof(hashtable_entry));
 }
 
 const char *hashtable_str(hashtable *ht, hashtable_entry *entry)

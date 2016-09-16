@@ -3,6 +3,7 @@
 #define __DOCINFO_H
 
 #include "hashtable.h"
+#include "reader.h"
 
 /* Data structures and types */
 typedef
@@ -23,6 +24,9 @@ struct docinfo_document_st {
 typedef
 struct docinfo_st {
 	hashtable ht;
+	hashtable ignored;
+	reader r;
+
 	unsigned int wordstats_capacity, wordstats_length;
 	unsigned int documents_capacity, documents_length;
 	unsigned int words_capacity, words_length;
@@ -37,7 +41,12 @@ int docinfo_initialize(docinfo *doc);
 void docinfo_cleanup(docinfo *doc);
 void docinfo_clear(docinfo *doc);
 
+int docinfo_add_default_ignored(docinfo *doc);
+void docinfo_clear_ignored(docinfo *doc);
+int docinfo_add_ignored(docinfo *doc, const char *word);
 int docinfo_add(docinfo *doc, const char *str, unsigned int doc_id);
+int docinfo_process_files(docinfo *doc, const char *directory,
+                          unsigned int num_files);
 
 unsigned int docinfo_num_documents(docinfo *doc);
 unsigned int docinfo_num_different_words(docinfo *doc);

@@ -1,6 +1,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 #include "docinfo.h"
 #include "hashtable.h"
@@ -13,6 +14,8 @@
 void docinfo_reset(docinfo *doc)
 {
 	hashtable_reset(&doc->ht);
+	hashtable_reset(&doc->ignored);
+	reader_reset(&doc->r);
 	doc->wordstats = NULL;
 	doc->documents = NULL;
 	doc->words = NULL;
@@ -24,6 +27,8 @@ int docinfo_initialize(docinfo *doc)
 	docinfo_reset(doc);
 
 	if (!hashtable_initialize(&doc->ht)) goto error_init;
+	if (!hashtable_initialize(&doc->ignored)) goto error_init;
+	if (!reader_initialize(&doc->r)) goto error_init;
 
 	size = INITIAL_WORDSTATS_SIZE * sizeof(docinfo_wordstats);
 	doc->wordstats = (docinfo_wordstats *) xmalloc(size);
@@ -54,6 +59,8 @@ error_init:
 void docinfo_cleanup(docinfo *doc)
 {
 	hashtable_cleanup(&doc->ht);
+	hashtable_cleanup(&doc->ignored);
+	reader_cleanup(&doc->r);
 	if (doc->wordstats) {
 		free(doc->wordstats);
 		doc->wordstats = NULL;
@@ -71,10 +78,41 @@ void docinfo_cleanup(docinfo *doc)
 void docinfo_clear(docinfo *doc)
 {
 	hashtable_clear(&doc->ht);
+	hashtable_clear(&doc->ignored);
 	doc->wordstats_length = 0;
 	doc->documents_length = 0;
 	doc->words_length = 0;
 }
+
+void docinfo_clear_ignored(docinfo *doc)
+{
+	hashtable_clear(&doc->ignored);
+}
+
+int docinfo_add_ignored(docinfo *doc, const char *word)
+{
+	return (hashtable_find(&doc->ignored, word, TRUE) != NULL);
+}
+
+static const char *default_ignored[] = {
+	"a", "an", "the", "of", "to", "in", "and", "for", "at",
+	"on", "is", "it", "''", "that", "this", "said", "not",
+	"by", "was", "would", "with", "has", "from", "will",
+	"its", "be", "as", "but", "he", "we", "are", "'s",
+	"``", "or", "than", "were", "have", "which", "they",
+	"any", 
+};
+
+int docinfo_add_default_ignored(docinfo *doc)
+{
+	unsigned int i;
+	for (i = 0; i < sizeof(default_ignored) / sizeof(const char *); i++) {
+		if (!docinfo_add_ignored(doc, default_ignored[i]))
+			return FALSE;
+	}
+	return TRUE;
+}
+
 
 static
 unsigned int docinfo_new_wordstats(docinfo *doc)
@@ -134,6 +172,9 @@ int docinfo_add(docinfo *doc, const char *str, unsigned int doc_id)
 	docinfo_wordstats *wordstats;
 	unsigned int word_idx, entry_idx, document_idx, stats_idx;
 
+	if (hashtable_find(&doc->ignored, str, FALSE))
+		return TRUE;
+
 	document = NULL;
 	document_idx = 0;
 	if (doc->documents_length > 0) {
@@ -187,6 +228,61 @@ int docinfo_add(docinfo *doc, const char *str, unsigned int doc_id)
 		wordstats->count++;
 	}
 	return TRUE;
+}
+
+int docinfo_process_files(docinfo *doc, const char *directory,
+                          unsigned int num_files)
+{
+	unsigned int i;
+	char old_dir[PATH_MAX];
+	char filename[PATH_MAX];
+	char *token;
+
+	getcwd(old_dir, sizeof(old_dir));
+	if (chdir(directory) < 0) {
+		error("could not change directory to `%s'", directory);
+		return FALSE;
+	}
+
+	docinfo_clear(doc);
+	reader_close(&doc->r);
+
+	printf("Reading documents... ");
+	for (i = 0; i < num_files; i++) {
+		sprintf(filename, "file_%d.txt", i + 1);
+		if (access(filename, F_OK) == -1)
+			continue;
+		if (!reader_open(&doc->r, filename))
+			goto error_process;
+
+		/* printf("Processing `%s'...\n", filename); */
+		while (TRUE) {
+			token = reader_read(&doc->r);
+			if (!token) goto error_process;
+			if (token[0] == '\0') break;
+
+			if (!docinfo_add(doc, token, i + 1))
+				goto error_process;
+		}
+		reader_close(&doc->r);
+	}
+
+	printf("done reading!\n");
+	printf("Num documents: %u\n", docinfo_num_documents(doc));
+	printf("Num different words: %u\n", docinfo_num_different_words(doc));
+	printf("Num wordstats: %u\n", docinfo_num_wordstats(doc));
+	printf("Total word count: %u\n", docinfo_num_words(doc));
+
+	if (chdir(old_dir) < 0) {
+		error("could not change directory back to `%s'", old_dir);
+		return FALSE;
+	}
+	return TRUE;
+
+error_process:
+	if (chdir(old_dir) < 0)
+		error("could not change directory back to `%s'", old_dir);
+	return FALSE;
 }
 
 unsigned int docinfo_num_documents(docinfo *doc)
