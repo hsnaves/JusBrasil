@@ -2,6 +2,7 @@
 #ifndef __PLSA_H
 #define __PLSA_H
 
+#include "docinfo.h"
 #include "hashtable.h"
 #include "reader.h"
 
@@ -12,9 +13,8 @@ struct plsa_st {
 	unsigned int num_documents;
 	unsigned int num_topics;
 	reader r;
-	hashtable ht;
+	docinfo doc;
 	hashtable ignored;
-	unsigned int *word_count;
 	unsigned int *topmost;
 	double *dt, *tw;
 	double *dt2, *tw2;

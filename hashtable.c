@@ -8,14 +8,12 @@
 
 #define INITIAL_TABLE_SIZE    1024
 #define INITIAL_ENTRIES_SIZE  1024
-#define INITIAL_DOCINFOS_SIZE   64
 #define INITIAL_STRS_SIZE     8192
 
 void hashtable_reset(hashtable *ht)
 {
 	ht->table = NULL;
 	ht->entries = NULL;
-	ht->docinfos = NULL;
 	ht->strs = NULL;
 }
 
@@ -33,10 +31,6 @@ int hashtable_initialize(hashtable *ht)
 	ht->entries = (hashtable_entry *) xmalloc(size);
 	if (!ht->entries) goto error_init;
 
-	size = INITIAL_DOCINFOS_SIZE * sizeof(hashtable_docinfo);
-	ht->docinfos = (hashtable_docinfo *) xmalloc(size);
-	if (!ht->docinfos) goto error_init;
-
 	ht->strs = (char *) xmalloc(INITIAL_STRS_SIZE);
 	if (!ht->strs) goto error_init;
 
@@ -46,9 +40,6 @@ int hashtable_initialize(hashtable *ht)
 
 	ht->entries_length = 0;
 	ht->entries_capacity = INITIAL_ENTRIES_SIZE;
-
-	ht->docinfos_length = 0;
-	ht->docinfos_capacity = INITIAL_DOCINFOS_SIZE;
 
 	ht->strs_length = 0;
 	ht->strs_capacity = INITIAL_STRS_SIZE;
@@ -69,14 +60,18 @@ void hashtable_cleanup(hashtable *ht)
 		free(ht->entries);
 		ht->entries = NULL;
 	}
-	if (ht->docinfos) {
-		free(ht->docinfos);
-		ht->docinfos = NULL;
-	}
 	if (ht->strs) {
 		free(ht->strs);
 		ht->strs = NULL;
 	}
+}
+
+void hashtable_clear(hashtable *ht)
+{
+	ht->table_used = 0;
+	ht->entries_length = 0;
+	ht->strs_length = 0;
+	memset(ht->table, 0, ht->table_size * sizeof(unsigned int));
 }
 
 static
@@ -94,23 +89,6 @@ unsigned int hashtable_new_entry(hashtable *ht)
 		ht->entries_capacity *= 2;
 	}
 	return ++(ht->entries_length);
-}
-
-static
-unsigned int hashtable_new_docinfo(hashtable *ht)
-{
-	if (ht->docinfos_length == ht->docinfos_capacity) {
-		size_t size;
-		void *ptr;
-
-		size = 2 * ht->docinfos_capacity * sizeof(hashtable_docinfo);
-		ptr = xrealloc(ht->docinfos, size);
-
-		if (!ptr) return 0;
-		ht->docinfos = (hashtable_docinfo *) ptr;
-		ht->docinfos_capacity *= 2;
-	}
-	return ++(ht->docinfos_length);
 }
 
 static
@@ -173,6 +151,7 @@ hashtable_entry *hashtable_find(hashtable *ht, const char *str, int add)
 		entry = &ht->entries[e - 1];
 		if (entry->hash == hash) {
 			if (strcmp(&ht->strs[entry->str - 1], str) == 0) {
+				if (add) entry->count++;
 				return entry;
 			}
 		}
@@ -193,9 +172,7 @@ hashtable_entry *hashtable_find(hashtable *ht, const char *str, int add)
 	entry = &ht->entries[e - 1];
 	entry->hash = hash;
 	entry->str = str_pos;
-	entry->count = 0;
-	entry->docinfo = 0;
-	entry->extra = NULL;
+	entry->count = 1;
 	entry->next = ht->table[idx];
 	ht->table[idx] = e;
 	ht->table_used++;
@@ -203,42 +180,22 @@ hashtable_entry *hashtable_find(hashtable *ht, const char *str, int add)
 	return entry;
 }
 
+hashtable_entry *hashtable_get_entry(hashtable *ht, unsigned int idx)
+{
+	return &ht->entries[idx - 1];
+}
+
+unsigned int hashtable_get_entry_idx(hashtable *ht, hashtable_entry *entry)
+{
+	ptrdiff_t diff;
+	diff = entry - ht->entries;
+	return 1 + (unsigned int) (diff / sizeof(hashtable_entry));
+}
+
 const char *hashtable_str(hashtable *ht, hashtable_entry *entry)
 {
 	if (!entry->str) return NULL;
 	return &ht->strs[entry->str - 1];
-}
-
-hashtable_docinfo *hashtable_append_info(hashtable *ht, hashtable_entry *entry,
-                                         unsigned int document)
-{
-	hashtable_docinfo *docinfo;
-	unsigned int d;
-
-	if (entry->docinfo) {
-		docinfo = &ht->docinfos[entry->docinfo - 1];
-		if (docinfo->document == document) {
-			return docinfo;
-		}
-	}
-
-	d = hashtable_new_docinfo(ht);
-	if (!d) return NULL;
-	docinfo = &ht->docinfos[d - 1];
-	docinfo->document = document;
-	docinfo->count = 0;
-	docinfo->next = entry->docinfo;
-	entry->docinfo = d;
-	return docinfo;
-}
-
-void hashtable_clear(hashtable *ht)
-{
-	ht->table_used = 0;
-	ht->entries_length = 0;
-	ht->docinfos_length = 0;
-	ht->strs_length = 0;
-	memset(ht->table, 0, ht->table_size * sizeof(unsigned int));
 }
 
 unsigned long hashtable_hash(const char *str)
