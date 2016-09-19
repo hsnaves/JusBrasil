@@ -78,7 +78,6 @@ void docinfo_cleanup(docinfo *doc)
 void docinfo_clear(docinfo *doc)
 {
 	hashtable_clear(&doc->ht);
-	hashtable_clear(&doc->ignored);
 	doc->wordstats_length = 0;
 	doc->documents_length = 0;
 	doc->words_length = 0;
@@ -100,7 +99,7 @@ static const char *default_ignored[] = {
 	"by", "was", "would", "with", "has", "from", "will",
 	"its", "be", "as", "but", "he", "we", "are", "'s",
 	"``", "or", "than", "were", "have", "which", "they",
-	"any", 
+	"any",
 };
 
 int docinfo_add_default_ignored(docinfo *doc)
@@ -112,7 +111,6 @@ int docinfo_add_default_ignored(docinfo *doc)
 	}
 	return TRUE;
 }
-
 
 static
 unsigned int docinfo_new_wordstats(docinfo *doc)

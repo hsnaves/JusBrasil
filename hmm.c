@@ -175,7 +175,7 @@ int hmm_optimize_generator(hmm *h)
 
 void hmm_generate_text(hmm *h, docinfo *doc)
 {
-	
+
 }
 
 
