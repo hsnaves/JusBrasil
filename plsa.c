@@ -9,6 +9,8 @@
 #include "utils.h"
 #include "random.h"
 
+#define EPS 1e-10
+
 void plsa_reset(plsa *pl)
 {
 	pl->dt = NULL;
@@ -277,14 +279,20 @@ int plsa_save(FILE *fp, plsa *pl)
 	for (i = 0; i < pl->num_documents; i++) {
 		for (j = 0; j < pl->num_topics; j++) {
 			pos = i * pl->num_topics + j;
-			fprintf(fp, "%g ", pl->dt[pos]);
+			if (fabs(pl->dt[pos]) < EPS)
+				fprintf(fp, "0 ");
+			else
+				fprintf(fp, "%g ", pl->dt[pos]);
 		}
 		fprintf(fp, "\n");
 	}
 	for (j = 0; j < pl->num_topics; j++) {
 		for (k = 0; k < pl->num_words; k++) {
 			pos2 = j * pl->num_words + k;
-			fprintf(fp, "%g ", pl->tw[pos2]);
+			if (fabs(pl->tw[pos2]) < EPS)
+				fprintf(fp, "0 ");
+			else
+				fprintf(fp, "%g ", pl->tw[pos2]);
 		}
 		fprintf(fp, "\n");
 	}
@@ -434,7 +442,7 @@ int main(int argc, char **argv)
 
 	genrand_randomize();
 
-#if 0
+#if 1
 	train_dataset("texts", 54562, 80, 1000, 0.001, "result.docinfo",
 	              "result.plsa");
 #else
