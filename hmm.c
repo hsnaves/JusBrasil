@@ -17,6 +17,11 @@ void hmm_reset(hmm *h)
 	h->sw = NULL;
 	h->sw2 = NULL;
 
+	h->dps = NULL;
+	h->dpe = NULL;
+	h->dps_s = NULL;
+	h->dpe_s = NULL;
+
 	h->opt_ss = NULL;
 	h->opt_ss_i = NULL;
 	h->opt_sw = NULL;
@@ -53,6 +58,28 @@ void hmm_cleanup_tables(hmm *h)
 }
 
 static
+void hmm_cleanup_dp_tables(hmm *h)
+{
+	if (h->dps) {
+		free(h->dps);
+		h->dps = NULL;
+	}
+	if (h->dpe) {
+		free(h->dpe);
+		h->dpe = NULL;
+	}
+	if (h->dps_s) {
+		free(h->dps_s);
+		h->dps_s = NULL;
+	}
+	if (h->dpe_s) {
+		free(h->dpe_s);
+		h->dpe_s = NULL;
+	}
+}
+
+
+static
 void hmm_cleanup_optimization_tables(hmm *h)
 {
 	if (h->opt_ss) {
@@ -84,6 +111,7 @@ void hmm_cleanup_optimization_tables(hmm *h)
 void hmm_cleanup(hmm *h)
 {
 	hmm_cleanup_tables(h);
+	hmm_cleanup_dp_tables(h);
 	hmm_cleanup_optimization_tables(h);
 }
 
@@ -132,8 +160,8 @@ void hmm_initialize_random(hmm *h)
 }
 
 static
-int hmm_allocate(hmm *h, unsigned int num_words,
-                 unsigned int num_documents, unsigned int num_states)
+int hmm_allocate_tables(hmm *h, unsigned int num_words,
+                        unsigned int num_documents, unsigned int num_states)
 {
 	size_t size;
 
@@ -159,14 +187,60 @@ int hmm_allocate(hmm *h, unsigned int num_words,
 	return TRUE;
 }
 
+static
+int hmm_allocate_dp_tables(hmm *h, unsigned int max_document_length)
+{
+	size_t size;
+
+	hmm_cleanup_dp_tables(h);
+	size = (max_document_length + 1) * sizeof(double);
+	h->dps = (double *) xmalloc(size);
+	if (!h->dps) return FALSE;
+
+	h->dpe = (double *) xmalloc(size);
+	if (!h->dpe) return FALSE;
+
+	size = h->num_states * (max_document_length + 1) * sizeof(double);
+	h->dps_s = (double *) xmalloc(size);
+	if (!h->dps_s) return FALSE;
+
+	h->dpe_s = (double *) xmalloc(size);
+	if (!h->dpe_s) return FALSE;
+
+	return TRUE;
+}
+
+static
+double hmm_iteration(hmm *h, docinfo *doc)
+{
+	return 0;
+}
+
 int hmm_train(hmm *h, docinfo *doc, unsigned int num_states,
               unsigned int max_iterations, double tol)
 {
-	if (!hmm_allocate(h, docinfo_num_different_words(doc),
-	                   docinfo_num_documents(doc), num_states))
+	double likelihood, old_likelihood;
+	unsigned int iter;
+
+	if (!hmm_allocate_tables(h, docinfo_num_different_words(doc),
+	                         docinfo_num_documents(doc), num_states))
+		return FALSE;
+
+	if (!hmm_allocate_dp_tables(h, docinfo_get_max_document_length(doc)))
 		return FALSE;
 
 	hmm_initialize_random(h);
+
+	old_likelihood = 100 * tol;
+	printf("Training HMM on data...\n");
+	for (iter = 0; iter < max_iterations; iter++) {
+		likelihood = hmm_iteration(h, doc);
+		printf("Iteration %d: likelihood = %g\n",
+		       iter + 1, likelihood);
+		if (fabs(likelihood - old_likelihood) < tol) break;
+		old_likelihood = likelihood;
+	}
+
 	return TRUE;
 }
 
@@ -221,13 +295,12 @@ void hmm_optimize_array(hmm *h, double *array, unsigned int size,
 	opt_i[2 * j + 1] = h->tmp_i[l];
 }
 
-int hmm_optimize_generator(hmm *h)
+static
+int hmm_allocate_optimization_tables(hmm *h)
 {
 	size_t size, num;
-	unsigned int i, pos;
 
 	hmm_cleanup_optimization_tables(h);
-
 	size = h->num_states * h->num_states * sizeof(double);
 	h->opt_ss = (double *) xmalloc(size);
 	if (!h->opt_ss) return FALSE;
@@ -252,6 +325,16 @@ int hmm_optimize_generator(hmm *h)
 	size = num * sizeof(double);
 	h->tmp_d = (double *) xmalloc(size);
 	if (!h->tmp_d) return FALSE;
+
+	return TRUE;
+}
+
+int hmm_optimize_generator(hmm *h)
+{
+	unsigned int i, pos;
+
+	if (!hmm_allocate_optimization_tables(h))
+		return FALSE;
 
 	for (i = 0; i < h->num_states; i++) {
 		pos = i * h->num_states;
@@ -339,7 +422,7 @@ int hmm_load(FILE *fp, hmm *h)
 	           &num_documents, &num_states) != 3)
 		return FALSE;
 
-	if (!hmm_allocate(h, num_words, num_documents, num_states))
+	if (!hmm_allocate_tables(h, num_words, num_documents, num_states))
 		goto error_load;
 
 	for (i = 0; i < h->num_states; i++) {

@@ -59,6 +59,7 @@ docinfo_document *docinfo_get_document(docinfo *doc, unsigned int idx);
 const char *docinfo_get_word(docinfo *doc, unsigned int idx);
 const char *docinfo_get_word_in_doc(docinfo *doc, docinfo_document *document,
                                     unsigned int idx);
+unsigned int docinfo_get_max_document_length(docinfo *doc);
 
 int docinfo_save(FILE *fp, docinfo *doc);
 int docinfo_load(FILE *fp, docinfo *doc);

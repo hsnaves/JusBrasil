@@ -14,6 +14,9 @@ struct hmm_st {
 	double *ss, *ss2;
 	double *sw, *sw2;
 
+	double *dps, *dpe;
+	double *dps_s, *dpe_s;
+
 	double *opt_ss, *opt_sw;
 	unsigned int *opt_ss_i, *opt_sw_i;
 

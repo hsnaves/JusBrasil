@@ -352,6 +352,18 @@ const char *docinfo_get_word_in_doc(docinfo *doc, docinfo_document *document,
 	return docinfo_get_word(doc, word);
 }
 
+unsigned int docinfo_get_max_document_length(docinfo *doc)
+{
+	docinfo_document *document;
+	unsigned int i, max_len;
+
+	max_len = 0;
+	for (i = 0; i < doc->documents_length; i++) {
+		document = &doc->documents[i];
+		max_len = MAX(max_len, document->word_count);
+	}
+	return max_len;
+}
 
 static
 int hashtable_save_uintval(FILE *fp, hashtable *ht,

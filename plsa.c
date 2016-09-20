@@ -154,8 +154,8 @@ double plsa_iteration(plsa *pl, docinfo *doc)
 }
 
 static
-int plsa_allocate(plsa *pl, unsigned int num_words,
-                  unsigned int num_documents, unsigned int num_topics)
+int plsa_allocate_tables(plsa *pl, unsigned int num_words,
+                         unsigned int num_documents, unsigned int num_topics)
 {
 	size_t size;
 
@@ -187,8 +187,8 @@ int plsa_train(plsa *pl, docinfo *doc, unsigned int num_topics,
 	double likelihood, old_likelihood;
 	unsigned int iter;
 
-	if (!plsa_allocate(pl, docinfo_num_different_words(doc),
-	                   docinfo_num_documents(doc), num_topics))
+	if (!plsa_allocate_tables(pl, docinfo_num_different_words(doc),
+	                          docinfo_num_documents(doc), num_topics))
 		return FALSE;
 
 	plsa_initialize_random(pl);
@@ -214,16 +214,26 @@ int cmp_topmost(const void *p1, const void *p2, void *arg)
 	return 0;
 }
 
-int plsa_print_best(plsa *pl, docinfo *doc, unsigned top_words,
-                    unsigned int top_topics, unsigned int num_documents)
+static
+int plsa_allocate_temporary(plsa *pl)
 {
-	unsigned int i, j, l;
 	size_t size;
 
 	plsa_cleanup_temporary(pl);
 	size = MAX(pl->num_words, pl->num_topics) * sizeof(plsa_topmost);
 	pl->top = (plsa_topmost *) xmalloc(size);
 	if (!pl->top) return FALSE;
+
+	return TRUE;
+}
+
+int plsa_print_best(plsa *pl, docinfo *doc, unsigned top_words,
+                    unsigned int top_topics, unsigned int num_documents)
+{
+	unsigned int i, j, l;
+
+	if (!plsa_allocate_temporary(pl))
+		return FALSE;
 
 	top_words = MIN(top_words, pl->num_words);
 	for (l = 0; l < pl->num_topics; l++) {
@@ -313,7 +323,7 @@ int plsa_load(FILE *fp, plsa *pl)
 	           &num_documents, &num_topics) != 3)
 		return FALSE;
 
-	if (!plsa_allocate(pl, num_words, num_documents, num_topics))
+	if (!plsa_allocate_tables(pl, num_words, num_documents, num_topics))
 		goto error_load;
 
 	for (i = 0; i < pl->num_documents; i++) {
