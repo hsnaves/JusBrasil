@@ -1,6 +1,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <math.h>
 
 #include "hmm.h"
@@ -193,14 +194,14 @@ int hmm_allocate_dp_tables(hmm *h, unsigned int max_document_length)
 	size_t size;
 
 	hmm_cleanup_dp_tables(h);
-	size = (max_document_length + 1) * sizeof(double);
+	size = (max_document_length + 2) * sizeof(double);
 	h->dps = (double *) xmalloc(size);
 	if (!h->dps) return FALSE;
 
 	h->dpe = (double *) xmalloc(size);
 	if (!h->dpe) return FALSE;
 
-	size = h->num_states * (max_document_length + 1) * sizeof(double);
+	size = h->num_states * (max_document_length + 2) * sizeof(double);
 	h->dps_s = (double *) xmalloc(size);
 	if (!h->dps_s) return FALSE;
 
@@ -211,8 +212,51 @@ int hmm_allocate_dp_tables(hmm *h, unsigned int max_document_length)
 }
 
 static
+void hmm_compute_dp_tables(hmm *h, docinfo *doc, unsigned int doc_idx)
+{
+	docinfo_document *document;
+	unsigned int i, j, k, l;
+	unsigned int pos, pos2, pos3, pos4;
+
+	document = docinfo_get_document(doc, doc_idx);
+
+	h->dps[0] = 1;
+	memset(h->dps_s, 0, h->num_states * sizeof(double));
+	h->dps_s[0] = 1;
+	for (i = 1; i <= document->word_count; i++) {
+		h->dps[i] = 0;
+		l = doc->words[document->words + i - 2] - 1;
+		for (j = 2; j < h->num_states; j++) {
+			pos = i * h->num_states + j;
+			h->dps_s[pos] = 0;
+			for (k = 0; k < h->num_states; k++) {
+				pos2 = (i - 1) * h->num_states + k;
+				pos3 = k * h->num_states + j;
+				h->dps_s[pos] += h->ss[pos3] * h->dps_s[pos2];
+			}
+			pos4 = j * h->num_words + l;
+			h->dps_s[pos] *= h->sw[pos4];
+			h->dps[i] += h->dps_s[pos];
+		}
+	}
+	pos = i * h->num_states + 1;
+	h->dps_s[pos] = 0;
+	for (k = 0; k < h->num_states; k++) {
+		pos2 = (i - 1) * h->num_states + k;
+		pos3 = k * h->num_states + 1;
+		h->dps_s[pos] += h->ss[pos3] * h->dps_s[pos2];
+	}
+	h->dps[i] = h->dps_s[pos];
+
+}
+
+static
 double hmm_iteration(hmm *h, docinfo *doc)
 {
+	unsigned int i;
+	for (i = 0; i < docinfo_num_documents(doc); i++) {
+		hmm_compute_dp_tables(h, doc, i + 1);
+	}
 	return 0;
 }
 
