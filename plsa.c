@@ -277,14 +277,14 @@ int plsa_save(FILE *fp, plsa *pl)
 	for (i = 0; i < pl->num_documents; i++) {
 		for (j = 0; j < pl->num_topics; j++) {
 			pos = i * pl->num_topics + j;
-			fprintf(fp, "%.8f ", pl->dt[pos]);
+			fprintf(fp, "%g ", pl->dt[pos]);
 		}
 		fprintf(fp, "\n");
 	}
 	for (j = 0; j < pl->num_topics; j++) {
 		for (k = 0; k < pl->num_words; k++) {
 			pos2 = j * pl->num_words + k;
-			fprintf(fp, "%.8f ", pl->tw[pos2]);
+			fprintf(fp, "%g ", pl->tw[pos2]);
 		}
 		fprintf(fp, "\n");
 	}
@@ -433,7 +433,12 @@ int main(int argc, char **argv)
 #endif
 
 	genrand_randomize();
-	print_results("result.docinfo", "result.plsa", 30, 5, 100);
 
+#if 0
+	train_dataset("texts", 54562, 80, 1000, 0.001, "result.docinfo",
+	              "result.plsa");
+#else
+	print_results("result.docinfo", "result.plsa", 30, 5, 100);
+#endif
 	return 0;
 }

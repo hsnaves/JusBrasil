@@ -106,16 +106,7 @@ int docinfo_add_ignored(docinfo *doc, const char *word)
 	return (hashtable_find(&doc->ignored, word, TRUE) != NULL);
 }
 
-#if 0
-static const char *default_ignored[] = {
-	"a", "an", "the", "of", "to", "in", "and", "for", "at",
-	"on", "is", "it", "''", "that", "this", "said", "not",
-	"by", "was", "would", "with", "has", "from", "will",
-	"its", "be", "as", "but", "he", "we", "are", "'s",
-	"``", "or", "than", "were", "have", "which", "they",
-	"any",
-};
-#else
+#if USE_IGNORED_PORTUGUESE
 static const char *default_ignored[] = {
 	"e", "o", "de", "que", "foi", "para", "do", "por", "nao",
 	"não", "é", "já", "a", "um", "uma", "no", "como", "em",
@@ -123,6 +114,15 @@ static const char *default_ignored[] = {
 	"isso", "ela", "nos", "na", "ao", "à", "q", "os",
 	"os", ",", "eles", "pra", "ou", "mas", "se", "nem",
 	"só", "ele", "dos", "das", "da"
+};
+#else
+static const char *default_ignored[] = {
+	"a", "an", "the", "of", "to", "in", "and", "for", "at",
+	"on", "is", "it", "''", "that", "this", "said", "not",
+	"by", "was", "would", "with", "has", "from", "will",
+	"its", "be", "as", "but", "he", "we", "are", "'s",
+	"``", "or", "than", "were", "have", "which", "they",
+	"any",
 };
 #endif
 
