@@ -151,17 +151,14 @@ double plsa_iteration(plsa *pl, docinfo *doc)
 	return likelihood / total_weight;
 }
 
-int plsa_train(plsa *pl, docinfo *doc, unsigned int num_topics,
-               unsigned int max_iterations, double tol)
+static
+int plsa_allocate(plsa *pl, unsigned int num_words,
+                  unsigned int num_documents, unsigned int num_topics)
 {
-	double likelihood, old_likelihood;
-	unsigned int iter;
 	size_t size;
 
-	plsa_cleanup_tables(pl);
-
-	pl->num_documents = docinfo_num_documents(doc);
-	pl->num_words = docinfo_num_different_words(doc);
+	pl->num_documents = num_documents;
+	pl->num_words = num_words;
 	pl->num_topics = num_topics;
 
 	size = pl->num_documents * num_topics * sizeof(double);
@@ -177,6 +174,22 @@ int plsa_train(plsa *pl, docinfo *doc, unsigned int num_topics,
 
 	pl->tw2 = (double *) xmalloc(size);
 	if (!pl->tw2) return FALSE;
+
+	return TRUE;
+}
+int plsa_train(plsa *pl, docinfo *doc, unsigned int num_topics,
+               unsigned int max_iterations, double tol)
+{
+	double likelihood, old_likelihood;
+	unsigned int iter;
+
+	plsa_cleanup_tables(pl);
+
+	if (!plsa_allocate(pl, docinfo_num_different_words(doc),
+	                   docinfo_num_documents(doc), num_topics))
+		return FALSE;
+
+
 
 	plsa_initialize_random(pl);
 	old_likelihood = 100 * tol;
@@ -232,8 +245,66 @@ int plsa_print_best(plsa *pl, docinfo *doc, unsigned top_words)
 	return TRUE;
 }
 
+int plsa_save(FILE *fp, plsa *pl)
+{
+	unsigned int i, j, k, pos, pos2;
+
+	fprintf(fp, "%u %u %u\n", pl->num_words,
+	       pl->num_documents, pl->num_topics);
+	for (i = 0; i < pl->num_documents; i++) {
+		for (j = 0; j < pl->num_topics; j++) {
+			pos = i * pl->num_topics + j;
+			fprintf(fp, "%.8f ", pl->dt[pos]);
+		}
+		fprintf(fp, "\n");
+	}
+	for (j = 0; j < pl->num_topics; j++) {
+		for (k = 0; k < pl->num_words; k++) {
+			pos2 = j * pl->num_words + k;
+			fprintf(fp, "%.8f ", pl->tw[pos2]);
+		}
+		fprintf(fp, "\n");
+	}
+	return TRUE;
+}
+
+int plsa_load(FILE *fp, plsa *pl)
+{
+	unsigned int i, j, k, pos, pos2;
+	unsigned int num_words, num_documents, num_topics;
+
+	if (fscanf(fp, "%u %u %u\n", &num_words,
+	           &num_documents, &num_topics) != 3)
+		return FALSE;
+
+	if (!plsa_allocate(pl, num_words, num_documents, num_topics))
+		return FALSE;
+
+	for (i = 0; i < pl->num_documents; i++) {
+		for (j = 0; j < pl->num_topics; j++) {
+			pos = i * pl->num_topics + j;
+			if (fscanf(fp, "%lf", &pl->dt[pos]) != 1)
+				goto error_load;
+		}
+	}
+	for (j = 0; j < pl->num_topics; j++) {
+		for (k = 0; k < pl->num_words; k++) {
+			pos2 = j * pl->num_words + k;
+			if (fscanf(fp, "%lf", &pl->tw[pos2]) != 1)
+				goto error_load;
+		}
+	}
+	return TRUE;
+
+error_load:
+	error("could not load PLSA");
+	plsa_cleanup(pl);
+	return FALSE;
+}
+
 int main(int argc, char **argv)
 {
+	FILE *fp;
 	docinfo doc;
 	plsa pl;
 
@@ -245,6 +316,31 @@ int main(int argc, char **argv)
 	genrand_randomize();
 	docinfo_reset(&doc);
 	plsa_reset(&pl);
+#if 0
+	fp = fopen("result.plsa", "rb");
+	if (!fp) {
+		error("could not load `result.plsa'");
+		goto error_main;
+	}
+	if (!plsa_load(fp, &pl)) {
+		fclose(fp);
+		goto error_main;
+	}
+	fclose(fp);
+
+	fp = fopen("result.docinfo", "rb");
+	if (!fp) {
+		error("could not load `result.docinfo'");
+		goto error_main;
+	}
+	if (!docinfo_load(fp, &doc)) {
+		fclose(fp);
+		goto error_main;
+	}
+	fclose(fp);
+
+	return 0;
+#endif
 
 	if (!docinfo_initialize(&doc))
 		goto error_main;
@@ -255,15 +351,36 @@ int main(int argc, char **argv)
 	if (!docinfo_add_default_ignored(&doc))
 		goto error_main;
 
+#if 0
 	if (!docinfo_process_files(&doc, "reuters/training", 14818))
 		goto error_main;
+#else
+	if (!docinfo_process_files(&doc, "matchmaking", 200000))
+		goto error_main;
+#endif
 
 	printf("\n");
-	if (!plsa_train(&pl, &doc, 100, 1000, 0.0001))
+	if (!plsa_train(&pl, &doc, 150, 5000, 0.001))
 		goto error_main;
 
-	if (!plsa_print_best(&pl,  &doc, 10))
+	if (!plsa_print_best(&pl,  &doc, 30))
 		goto error_main;
+
+	fp = fopen("result.plsa", "wb");
+	if (!fp) {
+		error("could not save `result.plsa'");
+		goto error_main;
+	}
+	plsa_save(fp, &pl);
+	fclose(fp);
+
+	fp = fopen("result.docinfo", "wb");
+	if (!fp) {
+		error("could not save `result.docinfo'");
+		goto error_main;
+	}
+	docinfo_save(fp, &doc);
+	fclose(fp);
 
 	docinfo_cleanup(&doc);
 	plsa_cleanup(&pl);

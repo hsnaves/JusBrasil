@@ -2,6 +2,7 @@
 #ifndef __PLSA_H
 #define __PLSA_H
 
+#include <stdio.h>
 #include "docinfo.h"
 
 /* Data structures and types */
@@ -23,5 +24,8 @@ void plsa_cleanup(plsa *pl);
 int plsa_train(plsa *pl, docinfo *doc, unsigned int num_topics,
                unsigned int max_iterations, double tol);
 int plsa_print_best(plsa *pl, docinfo *doc, unsigned top_words);
+
+int plsa_save(FILE *fp, plsa *pl);
+int plsa_load(FILE *fp, plsa *pl);
 
 #endif /* __PLSA_H */

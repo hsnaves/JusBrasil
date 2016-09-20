@@ -97,23 +97,22 @@ void xsort(void *ptr, size_t nmemb, size_t size,
 	l = 0;
 	r = (unsigned int) (nmemb - 1);
 	mid = genrand_int32() % ((unsigned int) nmemb);
-	printf("mid = %u, nmemb = %u\n", mid, nmemb);
 	while (TRUE) {
-		while (l < r) {
+		while (l <= r) {
 			cmp = (*cmpfunc)(&cptr[l * size],
 			                 &cptr[mid * size], arg);
 			if (cmp > 0) break;
 			l++;
 		}
-		if (l == r) break;
+		if (l > r) { l--; break; }
 
-		while (l < r) {
+		while (l <= r) {
 			cmp = (*cmpfunc)(&cptr[mid * size],
 			                 &cptr[r * size], arg);
-			if (cmp > 0) break;
+			if (cmp >= 0) break;
 			r--;
 		}
-		if (l == r) break;
+		if (l > r) { l--; break; }
 
 		swap_memory(&cptr[l * size], &cptr[r * size], size);
 		if (l == mid) {
@@ -121,7 +120,7 @@ void xsort(void *ptr, size_t nmemb, size_t size,
 		} else if (r == mid) {
 			mid = l;
 		}
-		if (r == l + 1) break;
+		if (r == l + 1) { break; }
 		l++;
 		r--;
 	}

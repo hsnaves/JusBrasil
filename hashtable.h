@@ -2,6 +2,8 @@
 #ifndef __HASHTABLE_H
 #define __HASHTABLE_H
 
+#include <stdio.h>
+
 /* Data structures and types */
 typedef
 union hashtable_val_st {
@@ -23,13 +25,16 @@ struct hashtable_entry_st {
 
 typedef
 struct hashtable_st {
-	unsigned int table_size, table_used;
+	unsigned int table_size;
 	unsigned int entries_capacity, entries_length;
 	unsigned int strs_capacity, strs_length;
 	unsigned int *table;
 	hashtable_entry *entries;
 	char *strs;
 } hashtable;
+
+typedef int (*hashtable_callback_fn)(FILE *fp, hashtable *ht,
+                                     hashtable_entry *entry, void *arg);
 
 /* Functions */
 void hashtable_reset(hashtable *ht);
@@ -43,5 +48,9 @@ unsigned int hashtable_get_entry_idx(hashtable *ht, hashtable_entry *entry);
 const char *hashtable_str(hashtable *ht, hashtable_entry *entry);
 unsigned long hashtable_hash(const char *str);
 
+int hashtable_save(FILE *fp, hashtable *ht,
+                   hashtable_callback_fn cb, void *arg);
+int hashtable_load(FILE *fp, hashtable *ht,
+                   hashtable_callback_fn cb, void *arg);
 
 #endif /* __HASHTABLE_H */

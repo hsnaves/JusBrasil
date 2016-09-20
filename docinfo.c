@@ -7,9 +7,9 @@
 #include "hashtable.h"
 #include "utils.h"
 
-#define INITIAL_WORDSTATS_SIZE  8192
-#define INITIAL_DOCUMENTS_SIZE  1024
-#define INITIAL_WORDS_SIZE      8192
+#define INITIAL_WORDSTATS_CAPACITY  8192
+#define INITIAL_DOCUMENTS_CAPACITY  1024
+#define INITIAL_WORDS_CAPACITY      8192
 
 void docinfo_reset(docinfo *doc)
 {
@@ -21,39 +21,52 @@ void docinfo_reset(docinfo *doc)
 	doc->words = NULL;
 }
 
-int docinfo_initialize(docinfo *doc)
+static
+int docinfo_initialize_aux(docinfo *doc, unsigned int wordstats_capacity,
+                           unsigned int documents_capacity,
+                           unsigned int words_capacity,
+                           int initialize_hashtables)
 {
 	size_t size;
 	docinfo_reset(doc);
 
-	if (!hashtable_initialize(&doc->ht)) goto error_init;
-	if (!hashtable_initialize(&doc->ignored)) goto error_init;
+	if (initialize_hashtables) {
+		if (!hashtable_initialize(&doc->ht)) goto error_init;
+		if (!hashtable_initialize(&doc->ignored)) goto error_init;
+	}
 	if (!reader_initialize(&doc->r)) goto error_init;
 
-	size = INITIAL_WORDSTATS_SIZE * sizeof(docinfo_wordstats);
+	size = wordstats_capacity * sizeof(docinfo_wordstats);
 	doc->wordstats = (docinfo_wordstats *) xmalloc(size);
 	if (!doc->wordstats) goto error_init;
 
-	size = INITIAL_DOCUMENTS_SIZE * sizeof(docinfo_document);
+	size = documents_capacity * sizeof(docinfo_document);
 	doc->documents = (docinfo_document *) xmalloc(size);
 	if (!doc->documents) goto error_init;
 
-	size = INITIAL_WORDS_SIZE * sizeof(unsigned int);
+	size = words_capacity * sizeof(unsigned int);
 	doc->words = (unsigned int *) xmalloc(size);
 	if (!doc->words) goto error_init;
 
-	doc->wordstats_capacity = INITIAL_WORDSTATS_SIZE;
+	doc->wordstats_capacity = wordstats_capacity;
 	doc->wordstats_length = 0;
 
-	doc->documents_capacity = INITIAL_DOCUMENTS_SIZE;
+	doc->documents_capacity = documents_capacity;
 	doc->documents_length = 0;
 
-	doc->words_capacity = INITIAL_WORDS_SIZE;
+	doc->words_capacity = words_capacity;
 	doc->words_length = 0;
 	return TRUE;
 error_init:
 	docinfo_cleanup(doc);
 	return FALSE;
+}
+
+int docinfo_initialize(docinfo *doc)
+{
+	return docinfo_initialize_aux(doc, INITIAL_WORDSTATS_CAPACITY,
+	                              INITIAL_DOCUMENTS_CAPACITY,
+	                              INITIAL_WORDS_CAPACITY, TRUE);
 }
 
 void docinfo_cleanup(docinfo *doc)
@@ -93,6 +106,7 @@ int docinfo_add_ignored(docinfo *doc, const char *word)
 	return (hashtable_find(&doc->ignored, word, TRUE) != NULL);
 }
 
+#if 0
 static const char *default_ignored[] = {
 	"a", "an", "the", "of", "to", "in", "and", "for", "at",
 	"on", "is", "it", "''", "that", "this", "said", "not",
@@ -101,6 +115,16 @@ static const char *default_ignored[] = {
 	"``", "or", "than", "were", "have", "which", "they",
 	"any",
 };
+#else
+static const char *default_ignored[] = {
+	"e", "o", "de", "que", "foi", "para", "do", "por", "nao",
+	"não", "é", "já", "a", "um", "uma", "no", "como", "em",
+	"me", "da", "eu", "com", "meu", "as", "sem", "pois",
+	"isso", "ela", "nos", "na", "ao", "à", "q", "os",
+	"os", ",", "eles", "pra", "ou", "mas", "se", "nem",
+	"só", "ele", "dos", "das", "da"
+};
+#endif
 
 int docinfo_add_default_ignored(docinfo *doc)
 {
@@ -318,4 +342,118 @@ const char *docinfo_get_word(docinfo *doc, unsigned int idx)
 	hashtable_entry *entry;
 	entry = hashtable_get_entry(&doc->ht, idx);
 	return hashtable_str(&doc->ht, entry);
+}
+
+static
+int hashtable_save_uintval(FILE *fp, hashtable *ht,
+                           hashtable_entry *entry, void *arg)
+{
+	fprintf(fp, "%u ", entry->val.uintval);
+	return TRUE;
+}
+
+int docinfo_save(FILE *fp, docinfo *doc)
+{
+	unsigned int i;
+	docinfo_wordstats *wordstats;
+	docinfo_document *document;
+
+	fprintf(fp, "%u %u\n", doc->wordstats_length, doc->wordstats_capacity);
+	fprintf(fp, "%u %u\n", doc->documents_length, doc->documents_capacity);
+	fprintf(fp, "%u %u\n", doc->words_length, doc->words_capacity);
+
+	if (!hashtable_save(fp, &doc->ignored,
+	                    &hashtable_save_uintval, NULL))
+		return FALSE;
+
+	if (!hashtable_save(fp, &doc->ht,
+	                    &hashtable_save_uintval, NULL))
+		return FALSE;
+
+	for (i = 0; i < doc->wordstats_length; i++) {
+		wordstats = &doc->wordstats[i];
+		fprintf(fp, "%u %u %u %u\n", wordstats->document,
+		        wordstats->word, wordstats->count, wordstats->next);
+	}
+
+	for (i = 0; i < doc->documents_length; i++) {
+		document = &doc->documents[i];
+		fprintf(fp, "%u %u %u\n", document->doc_id,
+		        document->word_count, document->words);
+	}
+
+	for (i = 0; i < doc->words_length; i++) {
+		fprintf(fp, "%u ", doc->words[i]);
+	}
+	fprintf(fp, "\n");
+
+	return TRUE;
+}
+
+static
+int hashtable_load_uintval(FILE *fp, hashtable *ht,
+                           hashtable_entry *entry, void *arg)
+{
+	if (fscanf(fp, "%u", &entry->val.uintval) != 1)
+		return FALSE;
+	return TRUE;
+}
+
+int docinfo_load(FILE *fp, docinfo *doc)
+{
+	unsigned int i;
+	unsigned int wordstats_length, wordstats_capacity;
+	unsigned int documents_length, documents_capacity;
+	unsigned int words_length, words_capacity;
+	docinfo_wordstats *wordstats;
+	docinfo_document *document;
+
+	if (fscanf(fp, "%u %u", &wordstats_length, &wordstats_capacity) != 2)
+		return FALSE;
+	if (fscanf(fp, "%u %u", &documents_length, &documents_capacity) != 2)
+		return FALSE;
+	if (fscanf(fp, "%u %u", &words_length, &words_capacity) != 2)
+		return FALSE;
+
+	if (!docinfo_initialize_aux(doc, wordstats_capacity,
+	                            documents_capacity, words_capacity, FALSE))
+		return FALSE;
+
+	if (!hashtable_load(fp, &doc->ignored,
+	                    &hashtable_load_uintval, NULL))
+		goto error_load;
+
+	if (!hashtable_load(fp, &doc->ht,
+	                    &hashtable_load_uintval, NULL))
+		goto error_load;
+
+	doc->wordstats_length = wordstats_length;
+	for (i = 0; i < wordstats_length; i++) {
+		wordstats = &doc->wordstats[i];
+		if (fscanf(fp, "%u %u %u %u", &wordstats->document,
+		           &wordstats->word, &wordstats->count,
+		           &wordstats->next) != 4)
+			goto error_load;
+	}
+
+	doc->documents_length = documents_length;
+	for (i = 0; i < documents_length; i++) {
+		document = &doc->documents[i];
+		if (fscanf(fp, "%u %u %u", &document->doc_id,
+		           &document->word_count, &document->words) != 3)
+			goto error_load;
+	}
+
+	doc->words_length = words_length;
+	for (i = 0; i < words_length; i++) {
+		if (fscanf(fp, "%u", &doc->words[i]) != 1)
+			goto error_load;
+	}
+
+	return TRUE;
+
+error_load:
+	error("could not load docinfo");
+	docinfo_cleanup(doc);
+	return FALSE;
 }

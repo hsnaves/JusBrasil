@@ -2,6 +2,7 @@
 #ifndef __DOCINFO_H
 #define __DOCINFO_H
 
+#include <stdio.h>
 #include "hashtable.h"
 #include "reader.h"
 
@@ -56,5 +57,8 @@ unsigned int docinfo_num_wordstats(docinfo *doc);
 docinfo_wordstats *docinfo_get_wordstats(docinfo *doc, unsigned int idx);
 docinfo_document *docinfo_get_document(docinfo *doc, unsigned int idx);
 const char *docinfo_get_word(docinfo *doc, unsigned int idx);
+
+int docinfo_save(FILE *fp, docinfo *doc);
+int docinfo_load(FILE *fp, docinfo *doc);
 
 #endif /* __DOCINFO_H */
