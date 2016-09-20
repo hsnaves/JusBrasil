@@ -21,6 +21,8 @@ void hmm_reset(hmm *h)
 	h->opt_ss_i = NULL;
 	h->opt_sw = NULL;
 	h->opt_sw_i = NULL;
+	h->tmp_i = NULL;
+	h->tmp_d = NULL;
 }
 
 int hmm_initialize(hmm *h)
@@ -68,6 +70,14 @@ void hmm_cleanup_optimization_tables(hmm *h)
 	if (h->opt_sw_i) {
 		free(h->opt_sw_i);
 		h->opt_sw_i = NULL;
+	}
+	if (h->tmp_i) {
+		free(h->tmp_i);
+		h->tmp_i = NULL;
+	}
+	if (h->tmp_d) {
+		free(h->tmp_d);
+		h->tmp_d = NULL;
 	}
 }
 
@@ -160,9 +170,61 @@ int hmm_train(hmm *h, docinfo *doc, unsigned int num_states,
 	return TRUE;
 }
 
+static
+int cmp_dbl_indirect(const void *p1, const void *p2, void *arg)
+{
+	const unsigned int *i1 = (const unsigned int *) p1;
+	const unsigned int *i2 = (const unsigned int *) p2;
+	const double *d = (const double *) arg;
+	if (d[*i1] < d[*i2]) return -1;
+	if (d[*i1] > d[*i2]) return 1;
+	return 0;
+}
+
+static
+void hmm_optimize_array(hmm *h, double *array, unsigned int size,
+                        double *opt_v, unsigned int *opt_i)
+{
+	double thresh;
+	unsigned int j, l, r;
+
+	thresh = 1.0 / size;
+	for (j = 0; j < size; j++) {
+		h->tmp_i[j] = j;
+		h->tmp_d[j] = array[j];
+	}
+	xsort(h->tmp_i, size, sizeof(unsigned int),
+	      &cmp_dbl_indirect, h->tmp_d);
+
+	j = 0;
+	l = 0;
+	r = size - 1;
+	while (l < r) {
+		if (h->tmp_d[l] + h->tmp_d[r] < thresh) {
+			opt_v[j] = h->tmp_d[r - 1] / thresh;
+			opt_i[2 * j] = h->tmp_i[r - 1];
+			opt_i[2 * j + 1] = h->tmp_i[r];
+			h->tmp_d[r - 1] += h->tmp_d[r] - thresh;
+			r--;
+			j++;
+		} else {
+			opt_v[j] = h->tmp_d[l] / thresh;
+			opt_i[2 * j] = h->tmp_i[l];
+			opt_i[2 * j + 1] = h->tmp_i[r];
+			h->tmp_d[r] += h->tmp_d[l] - thresh;
+			l++;
+			j++;
+		}
+	}
+	opt_v[j] = 1.0;
+	opt_i[2 * j] = h->tmp_i[l];
+	opt_i[2 * j + 1] = h->tmp_i[l];
+}
+
 int hmm_optimize_generator(hmm *h)
 {
-	size_t size;
+	size_t size, num;
+	unsigned int i, pos;
 
 	hmm_cleanup_optimization_tables(h);
 
@@ -170,7 +232,7 @@ int hmm_optimize_generator(hmm *h)
 	h->opt_ss = (double *) xmalloc(size);
 	if (!h->opt_ss) return FALSE;
 
-	size = h->num_states * h->num_states * sizeof(unsigned int);
+	size = 2 * h->num_states * h->num_states * sizeof(unsigned int);
 	h->opt_ss_i = (unsigned int *) xmalloc(size);
 	if (!h->opt_ss_i) return FALSE;
 
@@ -178,16 +240,61 @@ int hmm_optimize_generator(hmm *h)
 	h->opt_sw = (double *) xmalloc(size);
 	if (!h->opt_sw) return FALSE;
 
-	size = h->num_states * h->num_words * sizeof(unsigned int);
+	size = 2 * h->num_states * h->num_words * sizeof(unsigned int);
 	h->opt_sw_i = (unsigned int *) xmalloc(size);
 	if (!h->opt_sw_i) return FALSE;
 
+	num = MAX(h->num_states, h->num_words);
+	size = num * sizeof(unsigned int);
+	h->tmp_i = (unsigned int *) xmalloc(size);
+	if (!h->tmp_i) return FALSE;
+
+	size = num * sizeof(double);
+	h->tmp_d = (double *) xmalloc(size);
+	if (!h->tmp_d) return FALSE;
+
+	for (i = 0; i < h->num_states; i++) {
+		pos = i * h->num_states;
+		hmm_optimize_array(h, &h->ss[pos], h->num_states,
+		                   &h->opt_ss[pos], &h->opt_ss_i[2 * pos]);
+	}
+
+	for (i = 0; i < h->num_states; i++) {
+		pos = i * h->num_words;
+		hmm_optimize_array(h, &h->sw[pos], h->num_words,
+		                   &h->opt_sw[pos], &h->opt_sw_i[2 * pos]);
+	}
 	return TRUE;
 }
 
 void hmm_generate_text(hmm *h, docinfo *doc)
 {
+	unsigned int state, idx, pos, word_idx;
+	double val;
 
+	state = 0;
+	while (state != 1) {
+		idx = (unsigned int) (genrand_int32() % h->num_states);
+		val = genrand_real1();
+		pos = state * h->num_states + idx;
+		if (val >= h->opt_ss[pos]) {
+			state = h->opt_ss_i[2 * pos + 1];
+		} else {
+			state = h->opt_ss_i[2 * pos];
+		}
+		if (state > 1) {
+			idx = (unsigned int) (genrand_int32() % h->num_words);
+			val = genrand_real1();
+			pos = state * h->num_words + idx;
+			if (val >= h->opt_sw[pos]) {
+				word_idx = h->opt_sw_i[2 * pos + 1];
+			} else {
+				word_idx = h->opt_sw_i[2 * pos];
+			}
+			printf("%s ", docinfo_get_word(doc, word_idx + 1));
+		}
+	}
+	printf("\n");
 }
 
 int hmm_save(FILE *fp, hmm *h)
@@ -284,6 +391,14 @@ int train_dataset(const char *directory, unsigned int num_files,
 	printf("\n");
 	if (!hmm_train(&h, &doc, num_states, max_iter, tol))
 		goto error_train;
+
+	if (!hmm_optimize_generator(&h))
+		goto error_train;
+
+	hmm_generate_text(&h, &doc);
+	hmm_generate_text(&h, &doc);
+	hmm_generate_text(&h, &doc);
+
 
 	fp = fopen(hmm_file, "wb");
 	if (!fp) {

@@ -16,6 +16,9 @@ struct hmm_st {
 
 	double *opt_ss, *opt_sw;
 	unsigned int *opt_ss_i, *opt_sw_i;
+
+	double *tmp_d;
+	unsigned int *tmp_i;
 } hmm;
 
 /* Functions */
