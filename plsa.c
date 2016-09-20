@@ -159,6 +159,7 @@ int plsa_allocate(plsa *pl, unsigned int num_words,
 {
 	size_t size;
 
+	plsa_cleanup_tables(pl);
 	pl->num_documents = num_documents;
 	pl->num_words = num_words;
 	pl->num_topics = num_topics;
@@ -179,13 +180,13 @@ int plsa_allocate(plsa *pl, unsigned int num_words,
 
 	return TRUE;
 }
+
 int plsa_train(plsa *pl, docinfo *doc, unsigned int num_topics,
                unsigned int max_iterations, double tol)
 {
 	double likelihood, old_likelihood;
 	unsigned int iter;
 
-	plsa_cleanup_tables(pl);
 	if (!plsa_allocate(pl, docinfo_num_different_words(doc),
 	                   docinfo_num_documents(doc), num_topics))
 		return FALSE;

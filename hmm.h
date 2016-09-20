@@ -28,4 +28,7 @@ int hmm_train(hmm *h, docinfo *doc, unsigned int num_states,
 int hmm_optimize_generator(hmm *h);
 void hmm_generate_text(hmm *h, docinfo *doc);
 
+int hmm_save(FILE *fp, hmm *h);
+int hmm_load(FILE *fp, hmm *h);
+
 #endif /* __HMM_H */
