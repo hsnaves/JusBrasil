@@ -417,6 +417,8 @@ int docinfo_load(FILE *fp, docinfo *doc)
 	docinfo_wordstats *wordstats;
 	docinfo_document *document;
 
+	docinfo_reset(doc);
+
 	if (fscanf(fp, "%u %u", &wordstats_length, &wordstats_capacity) != 2)
 		return FALSE;
 	if (fscanf(fp, "%u %u", &documents_length, &documents_capacity) != 2)

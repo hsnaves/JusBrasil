@@ -304,12 +304,16 @@ int plsa_load(FILE *fp, plsa *pl)
 	unsigned int i, j, k, pos, pos2;
 	unsigned int num_words, num_documents, num_topics;
 
+	plsa_reset(pl);
+	if (!plsa_initialize(plsa *pl))
+		return FALSE;
+
 	if (fscanf(fp, "%u %u %u\n", &num_words,
 	           &num_documents, &num_topics) != 3)
 		return FALSE;
 
 	if (!plsa_allocate(pl, num_words, num_documents, num_topics))
-		return FALSE;
+		goto error_load;
 
 	for (i = 0; i < pl->num_documents; i++) {
 		for (j = 0; j < pl->num_topics; j++) {
