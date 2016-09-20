@@ -204,7 +204,7 @@ int plsa_train(plsa *pl, docinfo *doc, unsigned int num_topics,
 }
 
 static
-int cmp_topmost(const void *p1, const void *p2)
+int cmp_topmost(const void *p1, const void *p2, void *arg)
 {
 	const plsa_topmost *t1 = (const plsa_topmost *) p1;
 	const plsa_topmost *t2 = (const plsa_topmost *) p2;
@@ -230,8 +230,8 @@ int plsa_print_best(plsa *pl, docinfo *doc, unsigned top_words,
 			pl->top[j].idx = j;
 			pl->top[j].val = pl->tw[l * pl->num_words + j];
 		}
-		qsort(pl->top, pl->num_words, sizeof(plsa_topmost),
-		      &cmp_topmost);
+		xsort(pl->top, pl->num_words, sizeof(plsa_topmost),
+		      &cmp_topmost, NULL);
 
 		printf("\nTopic %d:\n", l + 1);
 		for (j = 0; j < top_words; j++) {
@@ -259,8 +259,8 @@ int plsa_print_best(plsa *pl, docinfo *doc, unsigned top_words,
 			pl->top[l].idx = l;
 			pl->top[l].val = pl->dt[i * pl->num_topics + l];
 		}
-		qsort(pl->top, pl->num_topics, sizeof(plsa_topmost),
-		      &cmp_topmost);
+		xsort(pl->top, pl->num_topics, sizeof(plsa_topmost),
+		      &cmp_topmost, NULL);
 		for (l = 0; l < top_topics; l++) {
 			printf("%u: %.4f, ", pl->top[l].idx + 1,
 			       pl->top[l].val);
@@ -305,7 +305,7 @@ int plsa_load(FILE *fp, plsa *pl)
 	unsigned int num_words, num_documents, num_topics;
 
 	plsa_reset(pl);
-	if (!plsa_initialize(plsa *pl))
+	if (!plsa_initialize(pl))
 		return FALSE;
 
 	if (fscanf(fp, "%u %u %u\n", &num_words,
@@ -436,7 +436,6 @@ error_print:
 	return FALSE;
 }
 
-
 int main(int argc, char **argv)
 {
 #if 1
@@ -446,7 +445,7 @@ int main(int argc, char **argv)
 
 	genrand_randomize();
 
-#if 1
+#if 0
 	train_dataset("texts", 54562, 80, 1000, 0.001, "result.docinfo",
 	              "result.plsa");
 #else
