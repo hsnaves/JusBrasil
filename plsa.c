@@ -15,7 +15,7 @@ void plsa_reset(plsa *pl)
 	pl->dt2 = NULL;
 	pl->tw = NULL;
 	pl->tw2 = NULL;
-	pl->topmost = NULL;
+	pl->top = NULL;
 }
 
 int plsa_initialize(plsa *pl)
@@ -48,9 +48,9 @@ void plsa_cleanup_tables(plsa *pl)
 static
 void plsa_cleanup_temporary(plsa *pl)
 {
-	if (pl->topmost) {
-		free(pl->topmost);
-		pl->topmost = NULL;
+	if (pl->top) {
+		free(pl->top);
+		pl->top = NULL;
 	}
 }
 
@@ -184,12 +184,9 @@ int plsa_train(plsa *pl, docinfo *doc, unsigned int num_topics,
 	unsigned int iter;
 
 	plsa_cleanup_tables(pl);
-
 	if (!plsa_allocate(pl, docinfo_num_different_words(doc),
 	                   docinfo_num_documents(doc), num_topics))
 		return FALSE;
-
-
 
 	plsa_initialize_random(pl);
 	old_likelihood = 100 * tol;
@@ -201,46 +198,72 @@ int plsa_train(plsa *pl, docinfo *doc, unsigned int num_topics,
 		if (fabs(likelihood - old_likelihood) < tol) break;
 		old_likelihood = likelihood;
 	}
-
 	return TRUE;
 }
 
-int plsa_print_best(plsa *pl, docinfo *doc, unsigned top_words)
+static
+int cmp_topmost(const void *p1, const void *p2)
 {
-	unsigned int i, j, l, tmp;
+	const plsa_topmost *t1 = (const plsa_topmost *) p1;
+	const plsa_topmost *t2 = (const plsa_topmost *) p2;
+	if (t1->val < t2->val) return 1;
+	if (t1->val > t2->val) return -1;
+	return 0;
+}
+
+int plsa_print_best(plsa *pl, docinfo *doc, unsigned top_words,
+                    unsigned int top_topics, unsigned int num_documents)
+{
+	unsigned int i, j, l;
 	size_t size;
 
 	plsa_cleanup_temporary(pl);
+	size = MAX(pl->num_words, pl->num_topics) * sizeof(plsa_topmost);
+	pl->top = (plsa_topmost *) xmalloc(size);
+	if (!pl->top) return FALSE;
 
-	size = pl->num_words * sizeof(unsigned int);
-	pl->topmost = (unsigned int *) xmalloc(size);
-	if (!pl->topmost) return FALSE;
-
-	for (j = 0; j < pl->num_words; j++) {
-		pl->topmost[j] = j;
-	}
-	if (top_words > pl->num_words)
-		top_words = pl->num_words;
-
+	top_words = MIN(top_words, pl->num_words);
 	for (l = 0; l < pl->num_topics; l++) {
-		memcpy(pl->tw2, &pl->tw[l * pl->num_words],
-		       pl->num_words * sizeof(double));
-		for (i = 0; i < top_words; i++) {
-			for (j = i + 1; j < pl->num_words; j++) {
-				if (pl->tw2[pl->topmost[i]] <
-				    pl->tw2[pl->topmost[j]]) {
-					tmp = pl->topmost[i];
-					pl->topmost[i] = pl->topmost[j];
-					pl->topmost[j] = tmp;
-				}
-			}
+		for (j = 0; j < pl->num_words; j++) {
+			pl->top[j].idx = j;
+			pl->top[j].val = pl->tw[l * pl->num_words + j];
 		}
+		qsort(pl->top, pl->num_words, sizeof(plsa_topmost),
+		      &cmp_topmost);
+
 		printf("\nTopic %d:\n", l + 1);
 		for (j = 0; j < top_words; j++) {
 			printf("%s: %g\n",
-			       docinfo_get_word(doc, pl->topmost[j] + 1),
-			       pl->tw2[pl->topmost[j]]);
+			       docinfo_get_word(doc, pl->top[j].idx + 1),
+			       pl->top[j].val);
 		}
+	}
+	printf("\n\n");
+
+	top_topics = MIN(top_topics, pl->num_topics);
+	num_documents = MIN(num_documents, pl->num_documents);
+	for (i = 0; i < num_documents; i++) {
+		docinfo_document *document;
+
+		printf("Document %u:\n", i + 1);
+		document = docinfo_get_document(doc, i + 1);
+		for (j = 0; j < document->word_count; j++) {
+			printf("%s ",
+			       docinfo_get_word_in_doc(doc, document, j + 1));
+		}
+		printf("\n");
+
+		for (l = 0; l < pl->num_topics; l++) {
+			pl->top[l].idx = l;
+			pl->top[l].val = pl->dt[i * pl->num_topics + l];
+		}
+		qsort(pl->top, pl->num_topics, sizeof(plsa_topmost),
+		      &cmp_topmost);
+		for (l = 0; l < top_topics; l++) {
+			printf("%u: %.4f, ", pl->top[l].idx + 1,
+			       pl->top[l].val);
+		}
+		printf("\n\n");
 	}
 	return TRUE;
 }
@@ -302,92 +325,115 @@ error_load:
 	return FALSE;
 }
 
-int main(int argc, char **argv)
+static
+int train_dataset(const char *directory, unsigned int num_files,
+                  unsigned int num_topics, unsigned int max_iter, double tol,
+                  const char *docinfo_file, const char *plsa_file)
 {
 	FILE *fp;
 	docinfo doc;
 	plsa pl;
 
-#if 1
-	setvbuf(stdout, 0, _IONBF, 0);
-	setvbuf(stderr, 0, _IONBF, 0);
-#endif
-
-	genrand_randomize();
 	docinfo_reset(&doc);
 	plsa_reset(&pl);
-#if 0
-	fp = fopen("result.plsa", "rb");
-	if (!fp) {
-		error("could not load `result.plsa'");
-		goto error_main;
-	}
-	if (!plsa_load(fp, &pl)) {
-		fclose(fp);
-		goto error_main;
-	}
-	fclose(fp);
-
-	fp = fopen("result.docinfo", "rb");
-	if (!fp) {
-		error("could not load `result.docinfo'");
-		goto error_main;
-	}
-	if (!docinfo_load(fp, &doc)) {
-		fclose(fp);
-		goto error_main;
-	}
-	fclose(fp);
-
-	return 0;
-#endif
 
 	if (!docinfo_initialize(&doc))
-		goto error_main;
+		goto error_train;
 
 	if (!plsa_initialize(&pl))
-		goto error_main;
+		goto error_train;
 
 	if (!docinfo_add_default_ignored(&doc))
-		goto error_main;
+		goto error_train;
 
-#if 0
-	if (!docinfo_process_files(&doc, "reuters/training", 14818))
-		goto error_main;
-#else
-	if (!docinfo_process_files(&doc, "matchmaking", 200000))
-		goto error_main;
-#endif
+	if (!docinfo_process_files(&doc, directory, num_files))
+		goto error_train;
 
 	printf("\n");
-	if (!plsa_train(&pl, &doc, 150, 5000, 0.001))
-		goto error_main;
+	if (!plsa_train(&pl, &doc, num_topics, max_iter, tol))
+		goto error_train;
 
-	if (!plsa_print_best(&pl,  &doc, 30))
-		goto error_main;
-
-	fp = fopen("result.plsa", "wb");
+	fp = fopen(plsa_file, "wb");
 	if (!fp) {
-		error("could not save `result.plsa'");
-		goto error_main;
+		error("could not save `%s'", plsa_file);
+		goto error_train;
 	}
 	plsa_save(fp, &pl);
 	fclose(fp);
 
-	fp = fopen("result.docinfo", "wb");
+	fp = fopen(docinfo_file, "wb");
 	if (!fp) {
-		error("could not save `result.docinfo'");
-		goto error_main;
+		error("could not save `%s'", docinfo_file);
+		goto error_train;
 	}
 	docinfo_save(fp, &doc);
 	fclose(fp);
 
 	docinfo_cleanup(&doc);
 	plsa_cleanup(&pl);
-	return 0;
+	return TRUE;
 
-error_main:
+error_train:
 	docinfo_cleanup(&doc);
 	plsa_cleanup(&pl);
-	return -1;
+	return FALSE;
+}
+
+static
+int print_results(const char *docinfo_file, const char *plsa_file,
+                  unsigned int top_words, unsigned int top_topics,
+                  unsigned int num_documents)
+{
+	FILE *fp;
+	docinfo doc;
+	plsa pl;
+
+	docinfo_reset(&doc);
+	plsa_reset(&pl);
+
+	fp = fopen(plsa_file, "rb");
+	if (!fp) {
+		error("could not load `%s'", plsa_file);
+		goto error_print;
+	}
+	if (!plsa_load(fp, &pl)) {
+		fclose(fp);
+		goto error_print;
+	}
+	fclose(fp);
+
+	fp = fopen(docinfo_file, "rb");
+	if (!fp) {
+		error("could not load `%s'", docinfo_file);
+		goto error_print;
+	}
+	if (!docinfo_load(fp, &doc)) {
+		fclose(fp);
+		goto error_print;
+	}
+	fclose(fp);
+
+	if (!plsa_print_best(&pl,  &doc, top_words, top_topics, num_documents))
+		goto error_print;
+
+	return TRUE;
+
+error_print:
+	docinfo_cleanup(&doc);
+	plsa_cleanup(&pl);
+	return FALSE;
+}
+
+
+int main(int argc, char **argv)
+{
+#if 1
+	setvbuf(stdout, 0, _IONBF, 0);
+	setvbuf(stderr, 0, _IONBF, 0);
+#endif
+
+	genrand_randomize();
+	print_results("result.docinfo", "result.plsa", 30, 5, 100);
+
+	return 0;
 }

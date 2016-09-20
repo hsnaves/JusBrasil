@@ -344,6 +344,15 @@ const char *docinfo_get_word(docinfo *doc, unsigned int idx)
 	return hashtable_str(&doc->ht, entry);
 }
 
+const char *docinfo_get_word_in_doc(docinfo *doc, docinfo_document *document,
+                                    unsigned int idx)
+{
+	unsigned int word;
+	word = doc->words[document->words + idx - 1];
+	return docinfo_get_word(doc, word);
+}
+
+
 static
 int hashtable_save_uintval(FILE *fp, hashtable *ht,
                            hashtable_entry *entry, void *arg)
