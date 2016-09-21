@@ -2,16 +2,16 @@
 
 CC=gcc
 RM=rm -f
-CFLAGS=-O3 -Wall -Wconversion -pedantic $(EXTRA_FLAGS) $(INCLUDES)
+CFLAGS=-O3 -Wall -Wconversion -ansi -pedantic $(EXTRA_FLAGS) $(INCLUDES)
 INCLUDES=
 LIBS=-lm
 
 all: plsa hmm
 
-plsa: plsa.o reader.o docinfo.o hashtable.o random.o utils.o
+plsa: plsa.o args.o reader.o docinfo.o hashtable.o random.o utils.o
 	$(CC) $^ $(LIBS) $(EXTRA_LD_FLAGS) -o $@
 
-hmm: hmm.o reader.o docinfo.o hashtable.o random.o utils.o
+hmm: hmm.o args.o reader.o docinfo.o hashtable.o random.o utils.o
 	$(CC) $^ $(LIBS) $(EXTRA_LD_FLAGS) -o $@
 
 .c.o:
@@ -26,6 +26,7 @@ clean:
 # DO NOT DELETE
 plsa.o: plsa.c plsa.h docinfo.h hashtable.h reader.h utils.h random.h
 hmm.o: hmm.c hmm.h docinfo.h hashtable.h reader.h utils.h random.h
+args.o: args.c args.h utils.h
 docinfo.o: docinfo.c docinfo.h hashtable.h reader.h utils.h
 hashtable.o: hashtable.c hashtable.h utils.h
 reader.o: reader.c reader.h utils.h
