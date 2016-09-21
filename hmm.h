@@ -2,6 +2,8 @@
 #ifndef __HMM_H
 #define __HMM_H
 
+#include <stdio.h>
+
 #include "docinfo.h"
 
 /* Data structures and types */
@@ -32,9 +34,11 @@ void hmm_cleanup(hmm *h);
 int hmm_train(hmm *h, docinfo *doc, unsigned int num_states,
               unsigned int max_iterations, double tol);
 int hmm_optimize_generator(hmm *h);
-void hmm_generate_text(hmm *h, docinfo *doc);
+void hmm_generate_text(const hmm *h, const docinfo *doc);
 
-int hmm_save(FILE *fp, hmm *h);
-int hmm_load(FILE *fp, hmm *h);
+int hmm_save(const hmm *h, FILE *fp);
+int hmm_save_easy(const hmm *h, const char *filename);
+int hmm_load(hmm *h, FILE *fp);
+int hmm_load_easy(hmm *h, const char *filename);
 
 #endif /* __HMM_H */

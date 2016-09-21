@@ -307,44 +307,45 @@ error_process:
 	return FALSE;
 }
 
-unsigned int docinfo_num_documents(docinfo *doc)
+unsigned int docinfo_num_documents(const docinfo *doc)
 {
 	return doc->documents_length;
 }
 
-unsigned int docinfo_num_different_words(docinfo *doc)
+unsigned int docinfo_num_different_words(const docinfo *doc)
 {
 	return doc->ht.entries_length;
 }
 
-unsigned int docinfo_num_words(docinfo *doc)
+unsigned int docinfo_num_words(const docinfo *doc)
 {
 	return doc->words_length;
 }
 
-unsigned int docinfo_num_wordstats(docinfo *doc)
+unsigned int docinfo_num_wordstats(const docinfo *doc)
 {
 	return doc->wordstats_length;
 }
 
-docinfo_wordstats *docinfo_get_wordstats(docinfo *doc, unsigned int idx)
+docinfo_wordstats *docinfo_get_wordstats(const docinfo *doc, unsigned int idx)
 {
 	return &doc->wordstats[idx - 1];
 }
 
-docinfo_document *docinfo_get_document(docinfo *doc, unsigned int idx)
+docinfo_document *docinfo_get_document(const docinfo *doc, unsigned int idx)
 {
 	return &doc->documents[idx - 1];
 }
 
-const char *docinfo_get_word(docinfo *doc, unsigned int idx)
+const char *docinfo_get_word(const docinfo *doc, unsigned int idx)
 {
 	hashtable_entry *entry;
 	entry = hashtable_get_entry(&doc->ht, idx);
 	return hashtable_str(&doc->ht, entry);
 }
 
-const char *docinfo_get_word_in_doc(docinfo *doc, docinfo_document *document,
+const char *docinfo_get_word_in_doc(const docinfo *doc,
+                                    const docinfo_document *document,
                                     unsigned int idx)
 {
 	unsigned int word;
@@ -352,7 +353,7 @@ const char *docinfo_get_word_in_doc(docinfo *doc, docinfo_document *document,
 	return docinfo_get_word(doc, word);
 }
 
-unsigned int docinfo_get_max_document_length(docinfo *doc)
+unsigned int docinfo_get_max_document_length(const docinfo *doc)
 {
 	docinfo_document *document;
 	unsigned int i, max_len;
@@ -366,15 +367,15 @@ unsigned int docinfo_get_max_document_length(docinfo *doc)
 }
 
 static
-int hashtable_save_uintval(FILE *fp, hashtable *ht,
-                           hashtable_entry *entry, void *arg)
+int hashtable_save_uintval(const hashtable *ht, FILE *fp,
+                           const hashtable_entry *entry, void *arg)
 {
 	if (fwrite(&entry->val.uintval, sizeof(unsigned int), 1, fp) != 1)
 		return FALSE;
 	return TRUE;
 }
 
-int docinfo_save(FILE *fp, docinfo *doc)
+int docinfo_save(const docinfo *doc, FILE *fp)
 {
 	if (fwrite(&doc->wordstats_length, sizeof(unsigned int), 1, fp) != 1)
 		return FALSE;
@@ -391,11 +392,11 @@ int docinfo_save(FILE *fp, docinfo *doc)
 	if (fwrite(&doc->words_capacity, sizeof(unsigned int), 1, fp) != 1)
 		return FALSE;
 
-	if (!hashtable_save(fp, &doc->ignored,
+	if (!hashtable_save(&doc->ignored, fp,
 	                    &hashtable_save_uintval, NULL))
 		return FALSE;
 
-	if (!hashtable_save(fp, &doc->ht,
+	if (!hashtable_save(&doc->ht, fp,
 	                    &hashtable_save_uintval, NULL))
 		return FALSE;
 
@@ -414,8 +415,23 @@ int docinfo_save(FILE *fp, docinfo *doc)
 	return TRUE;
 }
 
+int docinfo_save_easy(docinfo *doc, const char *filename)
+{
+	FILE *fp;
+	int ret;
+
+	fp = fopen(filename, "wb");
+	if (!fp) {
+		error("could not open `%s' for writing", filename);
+		return FALSE;
+	}
+	ret = docinfo_save(doc, fp);
+	fclose(fp);
+	return ret;
+}
+
 static
-int hashtable_load_uintval(FILE *fp, hashtable *ht,
+int hashtable_load_uintval(hashtable *ht, FILE *fp,
                            hashtable_entry *entry, void *arg)
 {
 	if (fread(&entry->val.uintval, sizeof(unsigned int), 1, fp) != 1)
@@ -423,7 +439,7 @@ int hashtable_load_uintval(FILE *fp, hashtable *ht,
 	return TRUE;
 }
 
-int docinfo_load(FILE *fp, docinfo *doc)
+int docinfo_load(docinfo *doc, FILE *fp)
 {
 	unsigned int wordstats_length, wordstats_capacity;
 	unsigned int documents_length, documents_capacity;
@@ -450,11 +466,11 @@ int docinfo_load(FILE *fp, docinfo *doc)
 	                            documents_capacity, words_capacity, FALSE))
 		return FALSE;
 
-	if (!hashtable_load(fp, &doc->ignored,
+	if (!hashtable_load(&doc->ignored, fp,
 	                    &hashtable_load_uintval, NULL))
 		goto error_load;
 
-	if (!hashtable_load(fp, &doc->ht,
+	if (!hashtable_load(&doc->ht, fp,
 	                    &hashtable_load_uintval, NULL))
 		goto error_load;
 
@@ -476,7 +492,22 @@ int docinfo_load(FILE *fp, docinfo *doc)
 	return TRUE;
 
 error_load:
-	error("could not load docinfo");
+	error("could not load DOCINFO");
 	docinfo_cleanup(doc);
 	return FALSE;
+}
+
+int docinfo_load_easy(docinfo *doc, const char *filename)
+{
+	FILE *fp;
+	int ret;
+
+	fp = fopen(filename, "rb");
+	if (!fp) {
+		error("could not open `%s' for reading", filename);
+		return FALSE;
+	}
+	ret = docinfo_load(doc, fp);
+	fclose(fp);
+	return ret;
 }

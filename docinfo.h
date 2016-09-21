@@ -49,19 +49,23 @@ int docinfo_add(docinfo *doc, const char *str, unsigned int doc_id);
 int docinfo_process_files(docinfo *doc, const char *directory,
                           unsigned int num_files);
 
-unsigned int docinfo_num_documents(docinfo *doc);
-unsigned int docinfo_num_different_words(docinfo *doc);
-unsigned int docinfo_num_words(docinfo *doc);
-unsigned int docinfo_num_wordstats(docinfo *doc);
+unsigned int docinfo_num_documents(const docinfo *doc);
+unsigned int docinfo_num_different_words(const docinfo *doc);
+unsigned int docinfo_num_words(const docinfo *doc);
+unsigned int docinfo_num_wordstats(const docinfo *doc);
 
-docinfo_wordstats *docinfo_get_wordstats(docinfo *doc, unsigned int idx);
-docinfo_document *docinfo_get_document(docinfo *doc, unsigned int idx);
-const char *docinfo_get_word(docinfo *doc, unsigned int idx);
-const char *docinfo_get_word_in_doc(docinfo *doc, docinfo_document *document,
+docinfo_wordstats *docinfo_get_wordstats(const docinfo *doc, unsigned int idx);
+docinfo_document *docinfo_get_document(const docinfo *doc, unsigned int idx);
+const char *docinfo_get_word(const docinfo *doc, unsigned int idx);
+const char *docinfo_get_word_in_doc(const docinfo *doc,
+                                    const docinfo_document *document,
                                     unsigned int idx);
-unsigned int docinfo_get_max_document_length(docinfo *doc);
+unsigned int docinfo_get_max_document_length(const docinfo *doc);
 
-int docinfo_save(FILE *fp, docinfo *doc);
-int docinfo_load(FILE *fp, docinfo *doc);
+int docinfo_save(const docinfo *doc, FILE *fp);
+int docinfo_save_easy(docinfo *doc, const char *filename);
+int docinfo_load(docinfo *doc, FILE *fp);
+int docinfo_load_easy(docinfo *doc, const char *filename);
+
 
 #endif /* __DOCINFO_H */

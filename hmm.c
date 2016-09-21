@@ -9,7 +9,6 @@
 #include "utils.h"
 #include "random.h"
 
-#define EPS 1e-10
 
 void hmm_reset(hmm *h)
 {
@@ -426,7 +425,7 @@ int hmm_optimize_generator(hmm *h)
 	return TRUE;
 }
 
-void hmm_generate_text(hmm *h, docinfo *doc)
+void hmm_generate_text(const hmm *h, const docinfo *doc)
 {
 	unsigned int state, idx, pos, word_idx;
 	double val;
@@ -456,7 +455,7 @@ void hmm_generate_text(hmm *h, docinfo *doc)
 	printf("\n");
 }
 
-int hmm_save(FILE *fp, hmm *h)
+int hmm_save(const hmm *h, FILE *fp)
 {
 	unsigned int nmemb;
 
@@ -478,7 +477,22 @@ int hmm_save(FILE *fp, hmm *h)
 	return TRUE;
 }
 
-int hmm_load(FILE *fp, hmm *h)
+int hmm_save_easy(const hmm *h, const char *filename)
+{
+	FILE *fp;
+	int ret;
+
+	fp = fopen(filename, "wb");
+	if (!fp) {
+		error("could not open `%s' for writing", filename);
+		return FALSE;
+	}
+	ret = hmm_save(h, fp);
+	fclose(fp);
+	return ret;
+}
+
+int hmm_load(hmm *h, FILE *fp)
 {
 	unsigned int nmemb, num_words, num_documents, num_states;
 
@@ -512,12 +526,26 @@ error_load:
 	return FALSE;
 }
 
+int hmm_load_easy(hmm *h, const char *filename)
+{
+	FILE *fp;
+	int ret;
+
+	fp = fopen(filename, "rb");
+	if (!fp) {
+		error("could not open `%s' for reading", filename);
+		return FALSE;
+	}
+	ret = hmm_load(h, fp);
+	fclose(fp);
+	return ret;
+}
+
 static
 int train_dataset(const char *directory, unsigned int num_files,
                   unsigned int num_states, unsigned int max_iter, double tol,
                   const char *docinfo_file, const char *hmm_file)
 {
-	FILE *fp;
 	docinfo doc;
 	hmm h;
 
@@ -548,21 +576,13 @@ int train_dataset(const char *directory, unsigned int num_files,
 	hmm_generate_text(&h, &doc);
 
 
-	fp = fopen(hmm_file, "wb");
-	if (!fp) {
-		error("could not save `%s'", hmm_file);
+	printf("Saving HMM to `%s'...\n", hmm_file);
+	if (!hmm_save_easy(&h, hmm_file))
 		goto error_train;
-	}
-	hmm_save(fp, &h);
-	fclose(fp);
 
-	fp = fopen(docinfo_file, "wb");
-	if (!fp) {
-		error("could not save `%s'", docinfo_file);
+	printf("Saving DOCINFO to `%s'...\n", docinfo_file);
+	if (!docinfo_save_easy(&doc, docinfo_file))
 		goto error_train;
-	}
-	docinfo_save(fp, &doc);
-	fclose(fp);
 
 	docinfo_cleanup(&doc);
 	hmm_cleanup(&h);

@@ -187,19 +187,20 @@ hashtable_entry *hashtable_find(hashtable *ht, const char *str, int add)
 	return entry;
 }
 
-hashtable_entry *hashtable_get_entry(hashtable *ht, unsigned int idx)
+hashtable_entry *hashtable_get_entry(const hashtable *ht, unsigned int idx)
 {
 	return &ht->entries[idx - 1];
 }
 
-unsigned int hashtable_get_entry_idx(hashtable *ht, hashtable_entry *entry)
+unsigned int hashtable_get_entry_idx(const hashtable *ht,
+                                     const hashtable_entry *entry)
 {
 	ptrdiff_t diff;
 	diff = entry - ht->entries;
 	return 1 + (unsigned int) (diff);
 }
 
-const char *hashtable_str(hashtable *ht, hashtable_entry *entry)
+const char *hashtable_str(const hashtable *ht, const hashtable_entry *entry)
 {
 	if (!entry->str) return NULL;
 	return &ht->strs[entry->str - 1];
@@ -216,8 +217,8 @@ unsigned long hashtable_hash(const char *str)
 	return hash;
 }
 
-int hashtable_save(FILE *fp, hashtable *ht,
-                   hashtable_callback_fn cb, void *arg)
+int hashtable_save(const hashtable *ht, FILE *fp,
+                   hashtable_save_cb cb, void *arg)
 {
 	unsigned int i;
 	hashtable_entry *entry;
@@ -242,7 +243,7 @@ int hashtable_save(FILE *fp, hashtable *ht,
 		if (fwrite(&entry->count, sizeof(unsigned int), 1, fp) != 1)
 			return FALSE;
 
-		if (!cb(fp, ht, entry, arg))
+		if (!cb(ht, fp, entry, arg))
 			return FALSE;
 	}
 
@@ -253,8 +254,24 @@ int hashtable_save(FILE *fp, hashtable *ht,
 	return TRUE;
 }
 
-int hashtable_load(FILE *fp, hashtable *ht,
-                   hashtable_callback_fn cb, void *arg)
+int hashtable_save_easy(const hashtable *ht, const char *filename,
+                        hashtable_save_cb cb, void *arg)
+{
+	FILE *fp;
+	int ret;
+
+	fp = fopen(filename, "wb");
+	if (!fp) {
+		error("could not open `%s' for writing", filename);
+		return FALSE;
+	}
+	ret = hashtable_save(ht, fp, cb, arg);
+	fclose(fp);
+	return ret;
+}
+
+int hashtable_load(hashtable *ht, FILE *fp,
+                   hashtable_load_cb cb, void *arg)
 {
 	unsigned int i, idx;
 	unsigned int table_size;
@@ -289,7 +306,7 @@ int hashtable_load(FILE *fp, hashtable *ht,
 		if (fread(&entry->count, sizeof(unsigned int), 1, fp) != 1)
 			goto error_load;
 
-		if (!cb(fp, ht, entry, arg))
+		if (!cb(ht, fp, entry, arg))
 			goto error_load;
 
 		idx = entry->hash % table_size;
@@ -304,7 +321,23 @@ int hashtable_load(FILE *fp, hashtable *ht,
 	return TRUE;
 
 error_load:
-	error("could not load hashtable");
+	error("could not load HASHTABLE");
 	hashtable_cleanup(ht);
 	return FALSE;
+}
+
+int hashtable_load_easy(hashtable *ht, const char *filename,
+                        hashtable_load_cb cb, void *arg)
+{
+	FILE *fp;
+	int ret;
+
+	fp = fopen(filename, "rb");
+	if (!fp) {
+		error("could not open `%s' for reading", filename);
+		return FALSE;
+	}
+	ret = hashtable_load(ht, fp, cb, arg);
+	fclose(fp);
+	return ret;
 }

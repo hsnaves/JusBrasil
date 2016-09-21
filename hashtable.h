@@ -33,8 +33,10 @@ struct hashtable_st {
 	char *strs;
 } hashtable;
 
-typedef int (*hashtable_callback_fn)(FILE *fp, hashtable *ht,
-                                     hashtable_entry *entry, void *arg);
+typedef int (*hashtable_save_cb)(const hashtable *ht, FILE *fp,
+                                 const hashtable_entry *entry, void *arg);
+typedef int (*hashtable_load_cb)(hashtable *ht, FILE *fp,
+                                 hashtable_entry *entry, void *arg);
 
 /* Functions */
 void hashtable_reset(hashtable *ht);
@@ -43,14 +45,19 @@ void hashtable_cleanup(hashtable *ht);
 void hashtable_clear(hashtable *ht);
 
 hashtable_entry *hashtable_find(hashtable *ht, const char *str, int add);
-hashtable_entry *hashtable_get_entry(hashtable *ht, unsigned int idx);
-unsigned int hashtable_get_entry_idx(hashtable *ht, hashtable_entry *entry);
-const char *hashtable_str(hashtable *ht, hashtable_entry *entry);
+hashtable_entry *hashtable_get_entry(const hashtable *ht, unsigned int idx);
+unsigned int hashtable_get_entry_idx(const hashtable *ht,
+                                     const hashtable_entry *entry);
+const char *hashtable_str(const hashtable *ht, const hashtable_entry *entry);
 unsigned long hashtable_hash(const char *str);
 
-int hashtable_save(FILE *fp, hashtable *ht,
-                   hashtable_callback_fn cb, void *arg);
-int hashtable_load(FILE *fp, hashtable *ht,
-                   hashtable_callback_fn cb, void *arg);
+int hashtable_save(const hashtable *ht, FILE *fp,
+                   hashtable_save_cb cb, void *arg);
+int hashtable_save_easy(const hashtable *ht, const char *filename,
+                        hashtable_save_cb cb, void *arg);
+int hashtable_load(hashtable *ht, FILE *fp,
+                   hashtable_load_cb cb, void *arg);
+int hashtable_load_easy(hashtable *ht, const char *filename,
+                        hashtable_load_cb cb, void *arg);
 
 #endif /* __HASHTABLE_H */

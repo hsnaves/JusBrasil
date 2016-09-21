@@ -25,4 +25,3 @@ void xsort(void *ptr, size_t nmemb, size_t size,
            int (*cmpfunc)(const void *, const void *, void *), void *arg);
 
 #endif /* __UTILS_H */
-

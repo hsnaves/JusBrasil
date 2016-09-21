@@ -29,10 +29,12 @@ void plsa_cleanup(plsa *pl);
 
 int plsa_train(plsa *pl, docinfo *doc, unsigned int num_topics,
                unsigned int max_iterations, double tol);
-int plsa_print_best(plsa *pl, docinfo *doc, unsigned top_words,
+int plsa_print_best(plsa *pl, const docinfo *doc, unsigned top_words,
                     unsigned int top_topics, unsigned int num_documents);
 
-int plsa_save(FILE *fp, plsa *pl);
-int plsa_load(FILE *fp, plsa *pl);
+int plsa_save(const plsa *pl, FILE *fp);
+int plsa_save_easy(const plsa *pl, const char *filename);
+int plsa_load(plsa *pl, FILE *fp);
+int plsa_load_easy(plsa *pl, const char *filename);
 
 #endif /* __PLSA_H */

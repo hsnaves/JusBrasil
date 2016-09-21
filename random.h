@@ -35,4 +35,3 @@ double genrand_gauss(void);
 void genrand_randomize(void);
 
 #endif /* __RANDOM_H */
-

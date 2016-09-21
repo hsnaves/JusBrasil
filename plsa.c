@@ -9,8 +9,6 @@
 #include "utils.h"
 #include "random.h"
 
-#define EPS 1e-10
-
 void plsa_reset(plsa *pl)
 {
 	pl->dt = NULL;
@@ -255,7 +253,7 @@ int plsa_allocate_temporary(plsa *pl)
 	return TRUE;
 }
 
-int plsa_print_best(plsa *pl, docinfo *doc, unsigned top_words,
+int plsa_print_best(plsa *pl, const docinfo *doc, unsigned top_words,
                     unsigned int top_topics, unsigned int num_documents)
 {
 	unsigned int i, j, l;
@@ -309,7 +307,7 @@ int plsa_print_best(plsa *pl, docinfo *doc, unsigned top_words,
 	return TRUE;
 }
 
-int plsa_save(FILE *fp, plsa *pl)
+int plsa_save(const plsa *pl, FILE *fp)
 {
 	unsigned int nmemb;
 
@@ -331,7 +329,22 @@ int plsa_save(FILE *fp, plsa *pl)
 	return TRUE;
 }
 
-int plsa_load(FILE *fp, plsa *pl)
+int plsa_save_easy(const plsa *pl, const char *filename)
+{
+	FILE *fp;
+	int ret;
+
+	fp = fopen(filename, "wb");
+	if (!fp) {
+		error("could not open `%s' for writing", filename);
+		return FALSE;
+	}
+	ret = plsa_save(pl, fp);
+	fclose(fp);
+	return ret;
+}
+
+int plsa_load(plsa *pl, FILE *fp)
 {
 	unsigned int nmemb, num_words, num_documents, num_topics;
 
@@ -365,12 +378,26 @@ error_load:
 	return FALSE;
 }
 
+int plsa_load_easy(plsa *pl, const char *filename)
+{
+	FILE *fp;
+	int ret;
+
+	fp = fopen(filename, "rb");
+	if (!fp) {
+		error("could not open `%s' for reading", filename);
+		return FALSE;
+	}
+	ret = plsa_load(pl, fp);
+	fclose(fp);
+	return ret;
+}
+
 static
 int train_dataset(const char *directory, unsigned int num_files,
                   unsigned int num_topics, unsigned int max_iter, double tol,
                   const char *docinfo_file, const char *plsa_file)
 {
-	FILE *fp;
 	docinfo doc;
 	plsa pl;
 
@@ -394,22 +421,12 @@ int train_dataset(const char *directory, unsigned int num_files,
 		goto error_train;
 
 	printf("Saving PLSA to `%s'...\n", plsa_file);
-	fp = fopen(plsa_file, "wb");
-	if (!fp) {
-		error("could not save `%s'", plsa_file);
+	if (!plsa_save_easy(&pl, plsa_file))
 		goto error_train;
-	}
-	plsa_save(fp, &pl);
-	fclose(fp);
 
 	printf("Saving DOCINFO to `%s'...\n", docinfo_file);
-	fp = fopen(docinfo_file, "wb");
-	if (!fp) {
-		error("could not save `%s'", docinfo_file);
+	if (!docinfo_save_easy(&doc, docinfo_file))
 		goto error_train;
-	}
-	docinfo_save(fp, &doc);
-	fclose(fp);
 
 	docinfo_cleanup(&doc);
 	plsa_cleanup(&pl);
@@ -426,7 +443,6 @@ int print_results(const char *docinfo_file, const char *plsa_file,
                   unsigned int top_words, unsigned int top_topics,
                   unsigned int num_documents)
 {
-	FILE *fp;
 	docinfo doc;
 	plsa pl;
 
@@ -434,28 +450,12 @@ int print_results(const char *docinfo_file, const char *plsa_file,
 	plsa_reset(&pl);
 
 	printf("Loading PLSA from `%s'...\n", plsa_file);
-	fp = fopen(plsa_file, "rb");
-	if (!fp) {
-		error("could not load `%s'", plsa_file);
+	if (!plsa_load_easy(&pl, plsa_file))
 		goto error_print;
-	}
-	if (!plsa_load(fp, &pl)) {
-		fclose(fp);
-		goto error_print;
-	}
-	fclose(fp);
 
 	printf("Loading DOCINFO from `%s'...\n", docinfo_file);
-	fp = fopen(docinfo_file, "rb");
-	if (!fp) {
-		error("could not load `%s'", docinfo_file);
+	if (!docinfo_load_easy(&doc, docinfo_file))
 		goto error_print;
-	}
-	if (!docinfo_load(fp, &doc)) {
-		fclose(fp);
-		goto error_print;
-	}
-	fclose(fp);
 
 	if (!plsa_print_best(&pl,  &doc, top_words, top_topics, num_documents))
 		goto error_print;
