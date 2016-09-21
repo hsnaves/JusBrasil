@@ -95,22 +95,25 @@ void plsa_initialize_random(plsa *pl)
 }
 
 static
-double plsa_iteration(plsa *pl, docinfo *doc)
+double plsa_iteration(plsa *pl, docinfo *doc, double *dt, double *tw,
+                      double *dt_old, double *tw_old)
 {
-	unsigned int i, j, k, l, num_wordstats;
 	unsigned pos, pos2;
-	double tmp, den, likelihood, total_weight;
+	unsigned int i, j, k, l, num_wordstats;
+	double dotprod, val, sum, likelihood, total_weight;
 	docinfo_wordstats *wordstats;
 	docinfo_document *document;
 	size_t size;
 
-	size = pl->num_documents * pl->num_topics * sizeof(double);
-	memcpy(pl->dt2, pl->dt, size);
-	memset(pl->dt, 0, size);
+	if (dt) {
+		size = pl->num_documents * pl->num_topics * sizeof(double);
+		memset(dt, 0, size);
+	}
 
-	size = pl->num_topics * pl->num_words * sizeof(double);
-	memcpy(pl->tw2, pl->tw, size);
-	memset(pl->tw, 0, size);
+	if (tw) {
+		size = pl->num_topics * pl->num_words * sizeof(double);
+		memset(tw, 0, size);
+	}
 
 	likelihood = 0;
 	total_weight = 0;
@@ -120,34 +123,35 @@ double plsa_iteration(plsa *pl, docinfo *doc)
 		k = wordstats->document - 1;
 		i = wordstats->word - 1;
 		document = docinfo_get_document(doc, wordstats->document);
-		tmp = 0;
+		dotprod = 0;
 		for (j = 0; j < pl->num_topics; j++) {
 			pos = k * pl->num_topics + j;
 			pos2 = j * pl->num_words + i;
-			tmp += pl->dt2[pos] * pl->tw2[pos2];
+			dotprod += dt_old[pos] * tw_old[pos2];
 		}
-		likelihood += wordstats->count * log(tmp);
+		likelihood += wordstats->count * log(dotprod);
 		total_weight += wordstats->count;
-		den = tmp * document->word_count;
 
 		for (j = 0; j < pl->num_topics; j++) {
 			pos = k * pl->num_topics + j;
 			pos2 = j * pl->num_words + i;
-			pl->dt[pos] += wordstats->count
-			  * pl->dt2[pos] * pl->tw2[pos2] / den;
-			pl->tw[pos2] += wordstats->count
-			  * pl->dt2[pos] * pl->tw2[pos2] / tmp;
+			val = wordstats->count * dt_old[pos]
+			        * tw_old[pos2] / dotprod;
+			if (dt) dt[pos] += val / document->word_count;
+			if (tw) tw[pos2] += val;
 		}
 	}
-	for (j = 0; j < pl->num_topics; j++) {
-		tmp = 0;
-		for (i = 0; i < pl->num_words; i++) {
-			pos2 = j * pl->num_words + i;
-			tmp += pl->tw[pos2];
-		}
-		for (i = 0; i < pl->num_words; i++) {
-			pos2 = j * pl->num_words + i;
-			pl->tw[pos2] /= tmp;
+	if (tw) {
+		for (j = 0; j < pl->num_topics; j++) {
+			sum = 0;
+			for (i = 0; i < pl->num_words; i++) {
+				pos2 = j * pl->num_words + i;
+				sum += tw[pos2];
+			}
+			for (i = 0; i < pl->num_words; i++) {
+				pos2 = j * pl->num_words + i;
+				tw[pos2] /= sum;
+			}
 		}
 	}
 	return likelihood / total_weight;
@@ -185,7 +189,9 @@ int plsa_train(plsa *pl, docinfo *doc, unsigned int num_topics,
                unsigned int max_iterations, double tol)
 {
 	double likelihood, old_likelihood;
+	double *dt, *tw, *dt_old, *tw_old;
 	unsigned int iter;
+	size_t size;
 
 	if (!plsa_allocate_tables(pl, docinfo_num_different_words(doc),
 	                          docinfo_num_documents(doc), num_topics))
@@ -195,11 +201,33 @@ int plsa_train(plsa *pl, docinfo *doc, unsigned int num_topics,
 	old_likelihood = 100 * tol;
 	printf("Running PLSA on data...\n");
 	for (iter = 0; iter < max_iterations; iter++) {
-		likelihood = plsa_iteration(pl, doc);
+		if (iter & 1) {
+			dt = pl->dt;
+			dt_old = pl->dt2;
+			tw = pl->tw;
+			tw_old = pl->tw2;
+		} else {
+			dt = pl->dt2;
+			dt_old = pl->dt;
+			tw = pl->tw2;
+			tw_old = pl->tw;
+		}
+		likelihood = plsa_iteration(pl, doc, dt, tw, dt_old, tw_old);
 		printf("Iteration %d: likelihood = %g\n",
 		       iter + 1, likelihood);
-		if (fabs(likelihood - old_likelihood) < tol) break;
+
+		if (fabs(likelihood - old_likelihood) < tol) {
+			iter++;
+			break;
+		}
 		old_likelihood = likelihood;
+	}
+	if (iter & 1) {
+		size = pl->num_documents * pl->num_topics * sizeof(double);
+		memcpy(pl->dt, pl->dt2, size);
+
+		size = pl->num_topics * pl->num_words * sizeof(double);
+		memcpy(pl->tw, pl->tw2, size);
 	}
 	return TRUE;
 }
@@ -456,7 +484,7 @@ int main(int argc, char **argv)
 
 	genrand_randomize();
 
-#if 0
+#if 1
 	train_dataset("texts", 54562, 80, 1000, 0.001, "result.docinfo",
 	              "result.plsa");
 #else
