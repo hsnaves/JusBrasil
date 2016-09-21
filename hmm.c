@@ -540,55 +540,6 @@ int hmm_load_easy(hmm *h, const char *filename)
 	return ret;
 }
 
-static
-int train_dataset(const char *directory, unsigned int num_files,
-                  unsigned int num_states, unsigned int max_iter, double tol,
-                  const char *docinfo_file, const char *hmm_file)
-{
-	docinfo doc;
-	hmm h;
-
-	docinfo_reset(&doc);
-	hmm_reset(&h);
-
-	if (!docinfo_initialize(&doc))
-		goto error_train;
-
-	if (!hmm_initialize(&h))
-		goto error_train;
-
-	if (!docinfo_process_files(&doc, directory, num_files))
-		goto error_train;
-
-	printf("\n");
-	if (!hmm_train(&h, &doc, num_states, max_iter, tol))
-		goto error_train;
-
-	if (!hmm_optimize_generator(&h))
-		goto error_train;
-
-	hmm_generate_text(&h, &doc);
-	hmm_generate_text(&h, &doc);
-	hmm_generate_text(&h, &doc);
-
-
-	printf("Saving HMM to `%s'...\n", hmm_file);
-	if (!hmm_save_easy(&h, hmm_file))
-		goto error_train;
-
-	printf("Saving DOCINFO to `%s'...\n", docinfo_file);
-	if (!docinfo_save_easy(&doc, docinfo_file))
-		goto error_train;
-
-	docinfo_cleanup(&doc);
-	hmm_cleanup(&h);
-	return TRUE;
-
-error_train:
-	docinfo_cleanup(&doc);
-	hmm_cleanup(&h);
-	return FALSE;
-}
 
 int main(int argc, char **argv)
 {
@@ -598,7 +549,5 @@ int main(int argc, char **argv)
 #endif
 
 	genrand_randomize();
-	train_dataset("texts", 54562, 80, 1000, 0.001, "result.docinfo",
-	              "result.hmm");
 	return 0;
 }

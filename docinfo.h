@@ -46,9 +46,10 @@ void docinfo_clear_ignored(docinfo *doc);
 int docinfo_add_ignored(docinfo *doc, const char *word);
 int docinfo_add_ignored_from_file(docinfo *doc, const char *filename);
 
-int docinfo_add(docinfo *doc, const char *str, unsigned int doc_id);
-int docinfo_process_files(docinfo *doc, const char *directory,
-                          unsigned int num_files);
+int docinfo_add(docinfo *doc, const char *str, unsigned int doc_id,
+                int add_to_hash);
+int docinfo_process_file(docinfo *doc, const char *master_file,
+                         int add_to_hash);
 
 unsigned int docinfo_num_documents(const docinfo *doc);
 unsigned int docinfo_num_different_words(const docinfo *doc);

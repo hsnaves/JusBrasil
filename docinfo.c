@@ -1,7 +1,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
+#include <string.h>
 
 #include "docinfo.h"
 #include "hashtable.h"
@@ -183,7 +183,8 @@ unsigned int docinfo_new_word(docinfo *doc)
 	return ++(doc->words_length);
 }
 
-int docinfo_add(docinfo *doc, const char *str, unsigned int doc_id)
+int docinfo_add(docinfo *doc, const char *str, unsigned int doc_id,
+                int add_to_hash)
 {
 	hashtable_entry *entry;
 	docinfo_document *document;
@@ -211,8 +212,14 @@ int docinfo_add(docinfo *doc, const char *str, unsigned int doc_id)
 		document->words = doc->words_length + 1;
 	}
 
-	entry = hashtable_find(&doc->ht, str, TRUE);
-	if (!entry) return FALSE;
+	entry = hashtable_find(&doc->ht, str, add_to_hash);
+	if (!entry) {
+		if (add_to_hash) return FALSE;
+		else {
+			error("could not find word `%s' in dictionary", str);
+			return TRUE;
+		}
+	}
 
 	document->word_count++;
 	word_idx = docinfo_new_word(doc);
@@ -248,58 +255,40 @@ int docinfo_add(docinfo *doc, const char *str, unsigned int doc_id)
 	return TRUE;
 }
 
-int docinfo_process_files(docinfo *doc, const char *directory,
-                          unsigned int num_files)
+int docinfo_process_file(docinfo *doc, const char *master_file,
+                         int add_to_hash)
 {
-	unsigned int i;
-	char old_dir[PATH_MAX];
-	char filename[PATH_MAX];
+	unsigned int j, doc_id;
 	char *token;
+	int first;
 
-	getcwd(old_dir, sizeof(old_dir));
-	if (chdir(directory) < 0) {
-		error("could not change directory to `%s'", directory);
-		return FALSE;
-	}
-
-	docinfo_clear(doc);
 	reader_close(&doc->r);
-
-	printf("Reading documents... ");
-	for (i = 0; i < num_files; i++) {
-		sprintf(filename, "file_%d.txt", i + 1);
-		if (access(filename, F_OK) == -1)
-			continue;
-		if (!reader_open(&doc->r, filename))
-			goto error_process;
-
-		/* printf("Processing `%s'...\n", filename); */
-		while (TRUE) {
-			token = reader_read(&doc->r);
-			if (!token) goto error_process;
-			if (token[0] == '\0') break;
-
-			if (!docinfo_add(doc, token, i + 1))
-				goto error_process;
-		}
-		reader_close(&doc->r);
-	}
-
-	printf("done reading!\n");
-	printf("Num documents: %u\n", docinfo_num_documents(doc));
-	printf("Num different words: %u\n", docinfo_num_different_words(doc));
-	printf("Num wordstats: %u\n", docinfo_num_wordstats(doc));
-	printf("Total word count: %u\n", docinfo_num_words(doc));
-
-	if (chdir(old_dir) < 0) {
-		error("could not change directory back to `%s'", old_dir);
+	if (!reader_open(&doc->r, master_file))
 		return FALSE;
+
+	first = TRUE;
+	while (TRUE) {
+		token = reader_read(&doc->r);
+		if (!token) goto error_process;
+		if (token[0] == '\0') break;
+		if (first) {
+			doc_id = strtoul(token, NULL, 10);
+			first = FALSE;
+		}
+
+		for(j = 0; token[j] == '-'; j++);
+		if (token[j] == '\0' && j >= 8) {
+			first = TRUE;
+			continue;
+		}
+		if (!docinfo_add(doc, token, doc_id, add_to_hash))
+			goto error_process;
 	}
+	reader_close(&doc->r);
 	return TRUE;
 
 error_process:
-	if (chdir(old_dir) < 0)
-		error("could not change directory back to `%s'", old_dir);
+	reader_close(&doc->r);
 	return FALSE;
 }
 

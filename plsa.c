@@ -394,8 +394,8 @@ int plsa_load_easy(plsa *pl, const char *filename)
 }
 
 static
-int train_dataset(const char *directory, unsigned int num_files,
-                  unsigned int num_topics, unsigned int max_iter, double tol,
+int train_dataset(const char *training_file, unsigned int num_topics,
+                  unsigned int max_iter, double tol,
                   const char *docinfo_file, const char *plsa_file,
                   const char *ignore_file)
 {
@@ -416,7 +416,7 @@ int train_dataset(const char *directory, unsigned int num_files,
 			goto error_train;
 	}
 
-	if (!docinfo_process_files(&doc, directory, num_files))
+	if (!docinfo_process_file(&doc, training_file, TRUE))
 		goto error_train;
 
 	printf("\n");
@@ -480,8 +480,8 @@ int main(int argc, char **argv)
 
 	genrand_randomize();
 
-#if 0
-	train_dataset("texts", 54562, 80, 1000, 0.001, "result.docinfo",
+#if 1
+	train_dataset("texts/training.txt", 80, 1000, 0.001, "result.docinfo",
 	              "result.plsa", "ignore.txt");
 #else
 	print_results("result.docinfo", "result.plsa", 30, 5, 100);
