@@ -239,8 +239,9 @@ void hmm_compute_dp_tables(hmm *h, docinfo *doc, unsigned int doc_idx)
 			h->dps[i] += h->dps_s[pos];
 		}
 	}
+	memset(&h->dps_s[i * h->num_states], 0,
+	       h->num_states * sizeof(double));
 	pos = i * h->num_states + 1;
-	h->dps_s[pos] = 0;
 	for (k = 0; k < h->num_states; k++) {
 		pos2 = (i - 1) * h->num_states + k;
 		pos3 = k * h->num_states + 1;
@@ -248,6 +249,37 @@ void hmm_compute_dp_tables(hmm *h, docinfo *doc, unsigned int doc_idx)
 	}
 	h->dps[i] = h->dps_s[pos];
 
+	i = document->word_count + 1;
+	memset(&h->dpe_s[i * h->num_states], 0,
+	       h->num_states * sizeof(double));
+	pos = i * h->num_states + 1;
+	h->dpe_s[pos] = 1;
+	h->dpe[i] = 1;
+	for (i = document->word_count; i >= 1; i--) {
+		h->dpe[i] = 0;
+		l = doc->words[document->words + i - 2] - 1;
+		for (j = 2; j < h->num_states; j++) {
+			pos = i * h->num_states + j;
+			h->dpe_s[pos] = 0;
+			for (k = 0; k < h->num_states; k++) {
+				pos2 = (i + 1) * h->num_states + k;
+				pos3 = j * h->num_states + k;
+				h->dpe_s[pos] += h->ss[pos3] * h->dpe_s[pos2];
+			}
+			pos4 = j * h->num_words + l;
+			h->dpe_s[pos] *= h->sw[pos4];
+			h->dpe[i] += h->dpe_s[pos];
+		}
+	}
+	memset(h->dpe_s, 0, h->num_states * sizeof(double));
+	pos = 0;
+	for (k = 0; k < h->num_states; k++) {
+		pos2 = 1 * h->num_states + k;
+		pos3 = k;
+		h->dpe_s[pos] += h->ss[pos3] * h->dpe_s[pos2];
+	}
+	h->dpe[0] = h->dpe_s[pos];
+	printf("%g %g\n", h->dps[document->word_count + 1], h->dpe[0]);
 }
 
 static
