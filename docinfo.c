@@ -534,10 +534,12 @@ int docinfo_build_cached(docinfo *doc, const char *docinfo_file,
 	printf("Num wordstats: %u\n", docinfo_num_wordstats(doc));
 	printf("Total word count: %u\n", docinfo_num_words(doc));
 
-	printf("Saving DOCINFO `%s'...\n", docinfo_file);
-	if (!docinfo_save_easy(doc, docinfo_file)) {
-		docinfo_cleanup(doc);
-		return FALSE;
+	if (docinfo_file) {
+		printf("Saving DOCINFO `%s'...\n", docinfo_file);
+		if (!docinfo_save_easy(doc, docinfo_file)) {
+			docinfo_cleanup(doc);
+			return FALSE;
+		}
 	}
 
 	return TRUE;

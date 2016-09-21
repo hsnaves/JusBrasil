@@ -257,27 +257,31 @@ int plsa_print_best(plsa *pl, const docinfo *doc, unsigned top_words,
                     unsigned int top_topics, unsigned int num_documents)
 {
 	unsigned int i, j, l;
+	const char *token;
 
 	if (!plsa_allocate_temporary(pl))
 		return FALSE;
 
 	top_words = MIN(top_words, pl->num_words);
-	for (l = 0; l < pl->num_topics; l++) {
-		for (j = 0; j < pl->num_words; j++) {
-			pl->top[j].idx = j;
-			pl->top[j].val = pl->tw[l * pl->num_words + j];
-		}
-		xsort(pl->top, pl->num_words, sizeof(plsa_topmost),
-		      &cmp_topmost, NULL);
+	if (top_words > 0) {
+		printf("Summary of topics:\n\n");
+		for (l = 0; l < pl->num_topics; l++) {
+			for (j = 0; j < pl->num_words; j++) {
+				pl->top[j].idx = j;
+				pl->top[j].val = pl->tw[l * pl->num_words + j];
+			}
+			xsort(pl->top, pl->num_words, sizeof(plsa_topmost),
+			      &cmp_topmost, NULL);
 
-		printf("\nTopic %d:\n", l + 1);
-		for (j = 0; j < top_words; j++) {
-			printf("%s: %g\n",
-			       docinfo_get_word(doc, pl->top[j].idx + 1),
-			       pl->top[j].val);
+			printf("\nTopic %d:\n", l + 1);
+			for (j = 0; j < top_words; j++) {
+				token = docinfo_get_word(doc,
+				                         pl->top[j].idx + 1);
+				printf("%s: %g\n", token, pl->top[j].val);
+			}
 		}
+		printf("\n\n");
 	}
-	printf("\n\n");
 
 	top_topics = MIN(top_topics, pl->num_topics);
 	num_documents = MIN(num_documents, pl->num_documents);
@@ -419,10 +423,12 @@ int plsa_build_cached(plsa *pl, const char *plsa_file, const docinfo *doc,
 		return FALSE;
 	}
 
-	printf("Saving PLSA `%s'...\n", plsa_file);
-	if (!plsa_save_easy(pl, plsa_file)) {
-		plsa_cleanup(pl);
-		return FALSE;
+	if (plsa_file) {
+		printf("Saving PLSA `%s'...\n", plsa_file);
+		if (!plsa_save_easy(pl, plsa_file)) {
+			plsa_cleanup(pl);
+			return FALSE;
+		}
 	}
 
 	return TRUE;
@@ -463,8 +469,73 @@ error_main:
 	return FALSE;
 }
 
+#define ARGTYPE_NONE   0
+#define ARGTYPE_FILE   1
+#define ARGTYPE_UINT   2
+#define ARGTYPE_DBL    3
+
+typedef
+struct option_st {
+	const char *name;
+	void *ptr;
+	int argtype;
+	const char *help;
+} option;
+
+static
+const char *argtype_names[] = { "", "file", "uint", "dbl" };
+
+static
+void print_help(const char *prog_name, option *opts, unsigned int num_opts)
+{
+	unsigned int i;
+	int len;
+
+	fprintf(stderr, "Usage:\n");
+	fprintf(stderr, " %s [options]\n", prog_name);
+	fprintf(stderr, "where the possible options are:\n");
+	for (i = 0; i < num_opts; i++) {
+		len = fprintf(stderr, "  %s %s ",
+		              opts[i].name, argtype_names[opts[i].argtype]);
+		while (len++ < 20) fprintf(stderr, " ");
+		fprintf(stderr, "%s\n", opts[i].help);
+	}
+}
+
 int main(int argc, char **argv)
 {
+	char *docinfo_file, *plsa_file;
+	char *training_file, *ignore_file;
+        unsigned int top_words, top_topics, num_documents;
+	unsigned int num_topics, max_iter;
+	double tol;
+	option opts[] = {
+		{ "-d", &docinfo_file, ARGTYPE_FILE,
+		  "specify the DOCINFO file" },
+		{ "-t", &training_file, ARGTYPE_FILE,
+		  "specify the training file" },
+		{ "-i", &ignore_file, ARGTYPE_FILE,
+		  "specify the ignore file" },
+		{ "-p", &plsa_file, ARGTYPE_FILE,
+		  "specify the PLSA file" },
+		{ "-q", &num_topics, ARGTYPE_UINT,
+		  "the number of topics" },
+		{ "-m", &max_iter, ARGTYPE_UINT,
+		  "the maximum number of iterations" },
+		{ "-e", &tol, ARGTYPE_DBL,
+		  "the tolerance for convergence" },
+		{ "-w", &top_words, ARGTYPE_UINT,
+		  "the number of words per topic" },
+		{ "-z", &top_topics, ARGTYPE_UINT,
+		  "the number of topics per document" },
+		{ "-y", &num_documents, ARGTYPE_UINT,
+		  "the number of documents to print" },
+		{ "--help", NULL, ARGTYPE_NONE,
+		  "print this help" },
+	};
+	unsigned int j, num_opts;
+	int i;
+
 #if 1
 	setvbuf(stdout, 0, _IONBF, 0);
 	setvbuf(stderr, 0, _IONBF, 0);
@@ -472,7 +543,74 @@ int main(int argc, char **argv)
 
 	genrand_randomize();
 
-	do_main("result.docinfo", "texts/training.txt", "ignore.txt",
-	        "result.plsa", 80, 1000, 0.001, 30, 5, 100);
+	docinfo_file = NULL;
+	plsa_file = NULL;
+	training_file = NULL;
+	ignore_file = NULL;
+	top_words = 0;
+	top_topics = 0;
+	num_documents = 0;
+	num_topics = 0;
+	max_iter = 0;
+	tol = 0;
+
+	num_opts = sizeof(opts) / sizeof(option);
+	for (i = 1; i < argc; i++) {
+		if (argv[i][0] == '-') {
+			for (j = 0; j < num_opts; j++) {
+				if (strcmp(opts[j].name, argv[i]) != 0)
+					continue;
+				break;
+			}
+
+			if (j >= num_opts) {
+				error("invalid option `%s'", argv[i]);
+				return -1;
+			}
+
+			if (opts[j].argtype != ARGTYPE_NONE) {
+				char **pstr;
+				unsigned int *puint;
+				double *pdbl;
+
+				if (i == argc - 1) {
+					error("option `%s' needs "
+					      "argument", argv[i]);
+					return -1;
+				}
+				switch(opts[j].argtype) {
+				case ARGTYPE_FILE:
+					pstr = (char **) opts[j].ptr;
+					*pstr = argv[++i];
+					break;
+				case ARGTYPE_UINT:
+					puint = (unsigned int *) opts[j].ptr;
+					*puint = strtoul(argv[++i], NULL, 10);
+					break;
+				case ARGTYPE_DBL:
+					pdbl = (double *) opts[j].ptr;
+					*pdbl = strtof(argv[++i], NULL);
+					break;
+				default:
+					break;
+				}
+			} else {
+				print_help(argv[0], opts, num_opts);
+				return 0;
+			}
+		} else {
+			error("invalid argument `%s'", argv[i]);
+			return -1;
+		}
+	}
+
+	if (argc == 1) {
+		print_help(argv[0], opts, num_opts);
+		return 0;
+	}
+
+	do_main(docinfo_file, training_file, ignore_file,
+	        plsa_file, num_topics, max_iter, tol,
+	        top_words, top_topics, num_documents);
 	return 0;
 }
