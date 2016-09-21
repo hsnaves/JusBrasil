@@ -88,9 +88,13 @@ void docinfo_cleanup(docinfo *doc)
 	}
 }
 
-void docinfo_clear(docinfo *doc)
+void docinfo_clear(docinfo *doc, int keep_strings)
 {
-	hashtable_clear(&doc->ht);
+	if (keep_strings) {
+		hashtable_clear_counters(&doc->ht);
+	} else {
+		hashtable_clear(&doc->ht);
+	}
 	doc->wordstats_length = 0;
 	doc->documents_length = 0;
 	doc->words_length = 0;
@@ -258,7 +262,7 @@ int docinfo_add(docinfo *doc, const char *str, unsigned int doc_id,
 int docinfo_process_file(docinfo *doc, const char *master_file,
                          int add_to_hash)
 {
-	unsigned int j, doc_id;
+	unsigned int j, doc_id = 0;
 	char *token;
 	int first;
 
@@ -274,6 +278,7 @@ int docinfo_process_file(docinfo *doc, const char *master_file,
 		if (first) {
 			doc_id = strtoul(token, NULL, 10);
 			first = FALSE;
+			continue;
 		}
 
 		for(j = 0; token[j] == '-'; j++);
@@ -299,7 +304,7 @@ unsigned int docinfo_num_documents(const docinfo *doc)
 
 unsigned int docinfo_num_different_words(const docinfo *doc)
 {
-	return doc->ht.entries_length;
+	return hashtable_num_entries(&doc->ht);
 }
 
 unsigned int docinfo_num_words(const docinfo *doc)

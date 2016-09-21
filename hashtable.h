@@ -42,9 +42,13 @@ typedef int (*hashtable_load_cb)(hashtable *ht, FILE *fp,
 void hashtable_reset(hashtable *ht);
 int hashtable_initialize(hashtable *ht);
 void hashtable_cleanup(hashtable *ht);
+
 void hashtable_clear(hashtable *ht);
+void hashtable_clear_counters(hashtable *ht);
 
 hashtable_entry *hashtable_find(hashtable *ht, const char *str, int add);
+
+unsigned int hashtable_num_entries(const hashtable *ht);
 hashtable_entry *hashtable_get_entry(const hashtable *ht, unsigned int idx);
 unsigned int hashtable_get_entry_idx(const hashtable *ht,
                                      const hashtable_entry *entry);

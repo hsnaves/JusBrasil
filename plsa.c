@@ -61,7 +61,7 @@ void plsa_cleanup(plsa *pl)
 }
 
 static
-void plsa_initialize_random(plsa *pl)
+void plsa_initialize_random(plsa *pl, int retrain_dt)
 {
 	unsigned int i, j, k, pos;
 	double sum;
@@ -78,6 +78,8 @@ void plsa_initialize_random(plsa *pl)
 			pl->dt[pos] /= sum;
 		}
 	}
+	if (retrain_dt) return;
+
 	for (j = 0; j < pl->num_topics; j++) {
 		sum = 0;
 		for (k = 0; k < pl->num_words; k++) {
@@ -161,30 +163,60 @@ int plsa_allocate_tables(plsa *pl, unsigned int num_words,
 {
 	size_t size;
 
-	plsa_cleanup_tables(pl);
+	if (pl->num_documents != num_documents
+	    || pl->num_topics != num_topics) {
+		if (pl->dt) {
+			free(pl->dt);
+			pl->dt = NULL;
+		}
+		if (pl->dt2) {
+			free(pl->dt2);
+			pl->dt2 = NULL;
+		}
+	}
+
+	if (pl->num_topics != num_topics || pl->num_words != num_words) {
+		if (pl->tw) {
+			free(pl->tw);
+			pl->tw = NULL;
+		}
+		if (pl->tw2) {
+			free(pl->tw2);
+			pl->tw2 = NULL;
+		}
+	}
+
 	pl->num_documents = num_documents;
 	pl->num_words = num_words;
 	pl->num_topics = num_topics;
 
 	size = pl->num_documents * num_topics * sizeof(double);
-	pl->dt = (double *) xmalloc(size);
-	if (!pl->dt) return FALSE;
+	if (!pl->dt) {
+		pl->dt = (double *) xmalloc(size);
+		if (!pl->dt) return FALSE;
+	}
 
-	pl->dt2 = (double *) xmalloc(size);
-	if (!pl->dt2) return FALSE;
+	if (!pl->dt2) {
+		pl->dt2 = (double *) xmalloc(size);
+		if (!pl->dt2) return FALSE;
+	}
 
 	size = num_topics * pl->num_words * sizeof(double);
-	pl->tw = (double *) xmalloc(size);
-	if (!pl->tw) return FALSE;
+	if (!pl->tw) {
+		pl->tw = (double *) xmalloc(size);
+		if (!pl->tw) return FALSE;
+	}
 
-	pl->tw2 = (double *) xmalloc(size);
-	if (!pl->tw2) return FALSE;
+	if (!pl->tw2) {
+		pl->tw2 = (double *) xmalloc(size);
+		if (!pl->tw2) return FALSE;
+	}
 
 	return TRUE;
 }
 
 int plsa_train(plsa *pl, const docinfo *doc, unsigned int num_topics,
-               unsigned int max_iterations, double tol)
+               unsigned int max_iterations, double tol, int retrain_dt)
 {
 	double likelihood, old_likelihood;
 	double *dt, *tw, *dt_old, *tw_old;
@@ -195,20 +227,31 @@ int plsa_train(plsa *pl, const docinfo *doc, unsigned int num_topics,
 	                          docinfo_num_documents(doc), num_topics))
 		return FALSE;
 
-	plsa_initialize_random(pl);
+	plsa_initialize_random(pl, retrain_dt);
+
 	old_likelihood = 100 * tol;
 	printf("Running PLSA on data...\n");
 	for (iter = 0; iter < max_iterations; iter++) {
 		if (iter & 1) {
 			dt = pl->dt;
 			dt_old = pl->dt2;
-			tw = pl->tw;
-			tw_old = pl->tw2;
+			if (retrain_dt) {
+				tw = NULL;
+				tw_old = pl->tw;
+			} else {
+				tw = pl->tw;
+				tw_old = pl->tw2;
+			}
 		} else {
 			dt = pl->dt2;
 			dt_old = pl->dt;
-			tw = pl->tw2;
-			tw_old = pl->tw;
+			if (retrain_dt) {
+				tw = NULL;
+				tw_old = pl->tw;
+			} else {
+				tw = pl->tw2;
+				tw_old = pl->tw;
+			}
 		}
 		likelihood = plsa_iteration(pl, doc, dt, tw, dt_old, tw_old);
 		printf("Iteration %d: likelihood = %g\n",
@@ -224,8 +267,10 @@ int plsa_train(plsa *pl, const docinfo *doc, unsigned int num_topics,
 		size = pl->num_documents * pl->num_topics * sizeof(double);
 		memcpy(pl->dt, pl->dt2, size);
 
-		size = pl->num_topics * pl->num_words * sizeof(double);
-		memcpy(pl->tw, pl->tw2, size);
+		if (!retrain_dt) {
+			size = pl->num_topics * pl->num_words * sizeof(double);
+			memcpy(pl->tw, pl->tw2, size);
+		}
 	}
 	return TRUE;
 }
@@ -253,39 +298,44 @@ int plsa_allocate_temporary(plsa *pl)
 	return TRUE;
 }
 
-int plsa_print_best(plsa *pl, const docinfo *doc, unsigned top_words,
-                    unsigned int top_topics, unsigned int num_documents)
+int plsa_print_topics(plsa *pl, const docinfo *doc, unsigned top_words)
 {
-	unsigned int i, j, l;
+	unsigned int j, l;
 	const char *token;
 
 	if (!plsa_allocate_temporary(pl))
 		return FALSE;
 
 	top_words = MIN(top_words, pl->num_words);
-	if (top_words > 0) {
-		printf("Summary of topics:\n\n");
-		for (l = 0; l < pl->num_topics; l++) {
-			for (j = 0; j < pl->num_words; j++) {
-				pl->top[j].idx = j;
-				pl->top[j].val = pl->tw[l * pl->num_words + j];
-			}
-			xsort(pl->top, pl->num_words, sizeof(plsa_topmost),
-			      &cmp_topmost, NULL);
-
-			printf("\nTopic %d:\n", l + 1);
-			for (j = 0; j < top_words; j++) {
-				token = docinfo_get_word(doc,
-				                         pl->top[j].idx + 1);
-				printf("%s: %g\n", token, pl->top[j].val);
-			}
+	printf("Summary of topics:\n\n");
+	for (l = 0; l < pl->num_topics; l++) {
+		for (j = 0; j < pl->num_words; j++) {
+			pl->top[j].idx = j;
+			pl->top[j].val = pl->tw[l * pl->num_words + j];
 		}
-		printf("\n\n");
+		xsort(pl->top, pl->num_words, sizeof(plsa_topmost),
+		      &cmp_topmost, NULL);
+
+		printf("\nTopic %d:\n", l + 1);
+		for (j = 0; j < top_words; j++) {
+			token = docinfo_get_word(doc,
+			                         pl->top[j].idx + 1);
+			printf("%s: %g\n", token, pl->top[j].val);
+		}
 	}
+	printf("\n\n");
+	return TRUE;
+}
+
+int plsa_print_documents(plsa *pl, const docinfo *doc, unsigned top_topics)
+{
+	unsigned int i, j, l;
+
+	if (!plsa_allocate_temporary(pl))
+		return FALSE;
 
 	top_topics = MIN(top_topics, pl->num_topics);
-	num_documents = MIN(num_documents, pl->num_documents);
-	for (i = 0; i < num_documents; i++) {
+	for (i = 0; i < pl->num_documents; i++) {
 		docinfo_document *document;
 
 		printf("Document %u:\n", i + 1);
@@ -308,6 +358,7 @@ int plsa_print_best(plsa *pl, const docinfo *doc, unsigned top_words,
 		}
 		printf("\n\n");
 	}
+
 	return TRUE;
 }
 
@@ -418,7 +469,7 @@ int plsa_build_cached(plsa *pl, const char *plsa_file, const docinfo *doc,
 	if (!plsa_initialize(pl))
 		return FALSE;
 
-	if (!plsa_train(pl, doc, num_topics, max_iter, tol)) {
+	if (!plsa_train(pl, doc, num_topics, max_iter, tol, FALSE)) {
 		plsa_cleanup(pl);
 		return FALSE;
 	}
@@ -438,8 +489,8 @@ static
 int do_main(const char *docinfo_file, const char *training_file,
             const char *ignore_file, const char *plsa_file,
             unsigned int num_topics, unsigned int max_iter, double tol,
-            unsigned int top_words, unsigned int top_topics,
-            unsigned int num_documents)
+            unsigned int top_words, const char *test_file,
+            unsigned int top_topics)
 {
 	docinfo doc;
 	plsa pl;
@@ -455,9 +506,24 @@ int do_main(const char *docinfo_file, const char *training_file,
 	                       num_topics, max_iter, tol))
 		goto error_main;
 
-	if (!plsa_print_best(&pl,  &doc, top_words,
-	                     top_topics, num_documents))
-		goto error_main;
+	if (top_words > 0) {
+		if (!plsa_print_topics(&pl,  &doc, top_words))
+			goto error_main;
+	}
+
+	if (test_file) {
+		docinfo_clear(&doc, TRUE);
+		if (!docinfo_process_file(&doc, test_file, FALSE))
+			goto error_main;
+
+		if (!plsa_train(&pl, &doc, num_topics, max_iter, tol, TRUE))
+			goto error_main;
+
+		if (top_topics > 0) {
+			if (!plsa_print_documents(&pl,  &doc, top_topics))
+				goto error_main;
+		}
+	}
 
 	docinfo_cleanup(&doc);
 	plsa_cleanup(&pl);
@@ -506,7 +572,8 @@ int main(int argc, char **argv)
 {
 	char *docinfo_file, *plsa_file;
 	char *training_file, *ignore_file;
-        unsigned int top_words, top_topics, num_documents;
+	char *test_file;
+        unsigned int top_words, top_topics;
 	unsigned int num_topics, max_iter;
 	double tol;
 	option opts[] = {
@@ -526,10 +593,10 @@ int main(int argc, char **argv)
 		  "the tolerance for convergence" },
 		{ "-w", &top_words, ARGTYPE_UINT,
 		  "the number of words per topic" },
+		{ "-y", &test_file, ARGTYPE_FILE,
+		  "specify the test file" },
 		{ "-z", &top_topics, ARGTYPE_UINT,
 		  "the number of topics per document" },
-		{ "-y", &num_documents, ARGTYPE_UINT,
-		  "the number of documents to print" },
 		{ "--help", NULL, ARGTYPE_NONE,
 		  "print this help" },
 	};
@@ -547,9 +614,9 @@ int main(int argc, char **argv)
 	plsa_file = NULL;
 	training_file = NULL;
 	ignore_file = NULL;
+	test_file = NULL;
 	top_words = 0;
 	top_topics = 0;
-	num_documents = 0;
 	num_topics = 0;
 	max_iter = 0;
 	tol = 0;
@@ -611,6 +678,6 @@ int main(int argc, char **argv)
 
 	do_main(docinfo_file, training_file, ignore_file,
 	        plsa_file, num_topics, max_iter, tol,
-	        top_words, top_topics, num_documents);
+	        top_words, test_file, top_topics);
 	return 0;
 }

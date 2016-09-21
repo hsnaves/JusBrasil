@@ -40,7 +40,8 @@ struct docinfo_st {
 void docinfo_reset(docinfo *doc);
 int docinfo_initialize(docinfo *doc);
 void docinfo_cleanup(docinfo *doc);
-void docinfo_clear(docinfo *doc);
+
+void docinfo_clear(docinfo *doc, int keep_strings);
 
 void docinfo_clear_ignored(docinfo *doc);
 int docinfo_add_ignored(docinfo *doc, const char *word);

@@ -28,9 +28,9 @@ int plsa_initialize(plsa *pl);
 void plsa_cleanup(plsa *pl);
 
 int plsa_train(plsa *pl, const docinfo *doc, unsigned int num_topics,
-               unsigned int max_iterations, double tol);
-int plsa_print_best(plsa *pl, const docinfo *doc, unsigned top_words,
-                    unsigned int top_topics, unsigned int num_documents);
+               unsigned int max_iterations, double tol, int retrain_dt);
+int plsa_print_topics(plsa *pl, const docinfo *doc, unsigned top_words);
+int plsa_print_documents(plsa *pl, const docinfo *doc, unsigned top_topics);
 
 int plsa_save(const plsa *pl, FILE *fp);
 int plsa_save_easy(const plsa *pl, const char *filename);

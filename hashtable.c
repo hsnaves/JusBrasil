@@ -82,6 +82,17 @@ void hashtable_clear(hashtable *ht)
 	memset(ht->table, 0, ht->table_size * sizeof(unsigned int));
 }
 
+void hashtable_clear_counters(hashtable *ht)
+{
+	unsigned int i;
+	hashtable_entry *entry;
+
+	for (i = 0; i < ht->entries_length; i++) {
+		entry = &ht->entries[i];
+		entry->count = 0;
+	}
+}
+
 static
 unsigned int hashtable_new_entry(hashtable *ht)
 {
@@ -185,6 +196,11 @@ hashtable_entry *hashtable_find(hashtable *ht, const char *str, int add)
 	ht->table[idx] = e;
 
 	return entry;
+}
+
+unsigned int hashtable_num_entries(const hashtable *ht)
+{
+	return ht->entries_length;
 }
 
 hashtable_entry *hashtable_get_entry(const hashtable *ht, unsigned int idx)
