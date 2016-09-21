@@ -339,7 +339,7 @@ const char *docinfo_get_word_in_doc(const docinfo *doc,
                                     unsigned int idx)
 {
 	unsigned int word;
-	word = doc->words[document->words + idx - 1];
+	word = doc->words[document->words + idx - 2];
 	return docinfo_get_word(doc, word);
 }
 
