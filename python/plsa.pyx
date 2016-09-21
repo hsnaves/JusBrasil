@@ -7,6 +7,15 @@ import math
 DTYPE = np.float
 ctypedef np.float_t DTYPE_t
 
+cdef normalize_rows(np.ndarray[DTYPE_t, ndim=2] A):
+	'''Normalize rows so that each row adds up to 1.
+
+	Args:
+		A (numpy.array): the matrix to be normalized.
+	'''
+	cdef np.ndarray[DTYPE_t, ndim = 1] sums = np.sum(A, axis = 1)
+	A /= np.expand_dims(sums, axis = 1)
+
 cdef generate_random_matrix(int num_rows, int num_cols):
 	'''Generates a uniformly random matrix whose columns add up to 1.
 
@@ -17,16 +26,18 @@ cdef generate_random_matrix(int num_rows, int num_cols):
 	Returns:
 		The random matrix.
 	'''
-	cdef np.ndarray[DTYPE_t, ndim=2] M = \
-	    np.random.uniform(size = (num_rows, num_cols), dtype=DTYPE)
-	cdef np.ndarray[DTYPE_t, ndim=2] MM = -np.log(M)
-	return MM * np.reciprocal(np.sum(MM, axis = 0))
+	cdef np.ndarray[DTYPE_t, ndim = 2] M = \
+	    np.random.uniform(size = (num_rows, num_cols))
+	cdef np.ndarray[DTYPE_t, ndim = 2] MM = -np.log(M)
+
+	normalize_rows(MM)
+	return MM
 
 def plsa_iteration(int[:] words, int[:] documents, DTYPE_t[:] weights,
                    int num_topics, np.ndarray[DTYPE_t, ndim=2] DT,
-                   np.ndarray[DTYPE_t, ndim=2] TW,
-                   np.ndarray[DTYPE_t, ndim=2] DT2,
-                   np.ndarray[DTYPE_t, ndim=2] TW2):
+                   np.ndarray[DTYPE_t, ndim = 2] TW,
+                   np.ndarray[DTYPE_t, ndim = 2] DT2,
+                   np.ndarray[DTYPE_t, ndim = 2] TW2):
 	'''One E-M iteration of the PLSA algorithm.
 
 	This function is an auxiliary function to `plsa_train`.
@@ -81,8 +92,8 @@ def plsa_iteration(int[:] words, int[:] documents, DTYPE_t[:] weights,
 			DT2[document, topic] += val
 			TW2[topic, word] += val
 
-	DT2 = DT2 * np.reciprocal(np.sum(DT, axis = 0))
-	TW2 = TW2 * np.reciprocal(np.sum(DT, axis = 0))
+	normalize_rows(DT2)
+	normalize_rows(TW2)
 
 	return likelihood / total_weight
 
@@ -110,9 +121,9 @@ def plsa_train(int[:] words, int[:] documents, DTYPE_t[:] weights,
 		Two matrices, DT and TW of conditional probabilities
 	'''
 	# Generates random matrices as initial conditional probabilities
-	cdef np.ndarray[DTYPE_t, ndim=2] DT1 = \
+	cdef np.ndarray[DTYPE_t, ndim = 2] DT1 = \
 	    generate_random_matrix(num_documents, num_topics)
-	cdef np.ndarray[DTYPE_t, ndim=2] TW1 = \
+	cdef np.ndarray[DTYPE_t, ndim = 2] TW1 = \
 	    generate_random_matrix(num_topics, num_words)
 
 	cdef np.ndarray[DTYPE_t, ndim=2] DT2 = \
@@ -132,7 +143,7 @@ def plsa_train(int[:] words, int[:] documents, DTYPE_t[:] weights,
 		TW1, TW2 = TW2, TW1
 
 		it += 1
-		print "Iteration %d, likelikhood = %f" % (it, likelihood)
+		print "Iteration %d: likelihood = %f" % (it, likelihood)
 
 		if math.fabs(old_likelihood - likelihood) < tol:
 			break
