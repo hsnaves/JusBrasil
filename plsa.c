@@ -396,7 +396,8 @@ int plsa_load_easy(plsa *pl, const char *filename)
 static
 int train_dataset(const char *directory, unsigned int num_files,
                   unsigned int num_topics, unsigned int max_iter, double tol,
-                  const char *docinfo_file, const char *plsa_file)
+                  const char *docinfo_file, const char *plsa_file,
+                  const char *ignore_file)
 {
 	docinfo doc;
 	plsa pl;
@@ -410,8 +411,10 @@ int train_dataset(const char *directory, unsigned int num_files,
 	if (!plsa_initialize(&pl))
 		goto error_train;
 
-	if (!docinfo_add_default_ignored(&doc))
-		goto error_train;
+	if (ignore_file) {
+		if (!docinfo_add_ignored_from_file(&doc, ignore_file))
+			goto error_train;
+	}
 
 	if (!docinfo_process_files(&doc, directory, num_files))
 		goto error_train;
@@ -479,7 +482,7 @@ int main(int argc, char **argv)
 
 #if 0
 	train_dataset("texts", 54562, 80, 1000, 0.001, "result.docinfo",
-	              "result.plsa");
+	              "result.plsa", "ignore.txt");
 #else
 	print_results("result.docinfo", "result.plsa", 30, 5, 100);
 #endif

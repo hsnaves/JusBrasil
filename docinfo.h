@@ -42,9 +42,10 @@ int docinfo_initialize(docinfo *doc);
 void docinfo_cleanup(docinfo *doc);
 void docinfo_clear(docinfo *doc);
 
-int docinfo_add_default_ignored(docinfo *doc);
 void docinfo_clear_ignored(docinfo *doc);
 int docinfo_add_ignored(docinfo *doc, const char *word);
+int docinfo_add_ignored_from_file(docinfo *doc, const char *filename);
+
 int docinfo_add(docinfo *doc, const char *str, unsigned int doc_id);
 int docinfo_process_files(docinfo *doc, const char *directory,
                           unsigned int num_files);

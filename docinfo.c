@@ -106,35 +106,31 @@ int docinfo_add_ignored(docinfo *doc, const char *word)
 	return (hashtable_find(&doc->ignored, word, TRUE) != NULL);
 }
 
-#if USE_IGNORED_PORTUGUESE
-static const char *default_ignored[] = {
-	"e", "o", "de", "que", "foi", "para", "do", "por", "nao",
-	"não", "é", "já", "a", "um", "uma", "no", "como", "em",
-	"me", "da", "eu", "com", "meu", "as", "sem", "pois",
-	"isso", "ela", "nos", "na", "ao", "à", "q", "os",
-	"os", ",", "eles", "pra", "ou", "mas", "se", "nem",
-	"só", "ele", "dos", "das", "da"
-};
-#else
-static const char *default_ignored[] = {
-	"a", "an", "the", "of", "to", "in", "and", "for", "at",
-	"on", "is", "it", "''", "that", "this", "said", "not",
-	"by", "was", "would", "with", "has", "from", "will",
-	"its", "be", "as", "but", "he", "we", "are", "'s",
-	"``", "or", "than", "were", "have", "which", "they",
-	"any",
-};
-#endif
-
-int docinfo_add_default_ignored(docinfo *doc)
+int docinfo_add_ignored_from_file(docinfo *doc, const char *filename)
 {
-	unsigned int i;
-	for (i = 0; i < sizeof(default_ignored) / sizeof(const char *); i++) {
-		if (!docinfo_add_ignored(doc, default_ignored[i]))
-			return FALSE;
+	int ret = TRUE;
+	char *token;
+	reader_close(&doc->r);
+
+	if (!reader_open(&doc->r, filename))
+		return FALSE;
+
+	while (TRUE) {
+		token = reader_read(&doc->r);
+		if (!token) {
+			ret = FALSE;
+			break;
+		}
+		if (token[0] == '\0') break;
+		if (!docinfo_add_ignored(doc, token)) {
+			ret = FALSE;
+			break;
+		}
 	}
-	return TRUE;
+	reader_close(&doc->r);
+	return ret;
 }
+
 
 static
 unsigned int docinfo_new_wordstats(docinfo *doc)

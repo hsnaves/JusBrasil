@@ -9,7 +9,6 @@
 #include "utils.h"
 #include "random.h"
 
-
 void hmm_reset(hmm *h)
 {
 	h->ss = NULL;
@@ -556,9 +555,6 @@ int train_dataset(const char *directory, unsigned int num_files,
 		goto error_train;
 
 	if (!hmm_initialize(&h))
-		goto error_train;
-
-	if (!docinfo_add_default_ignored(&doc))
 		goto error_train;
 
 	if (!docinfo_process_files(&doc, directory, num_files))
