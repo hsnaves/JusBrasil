@@ -369,19 +369,27 @@ static
 int hashtable_save_uintval(FILE *fp, hashtable *ht,
                            hashtable_entry *entry, void *arg)
 {
-	fprintf(fp, "%u ", entry->val.uintval);
+	if (fwrite(&entry->val.uintval, sizeof(unsigned int), 1, fp) != 1)
+		return FALSE;
 	return TRUE;
 }
 
 int docinfo_save(FILE *fp, docinfo *doc)
 {
-	unsigned int i;
-	docinfo_wordstats *wordstats;
-	docinfo_document *document;
+	if (fwrite(&doc->wordstats_length, sizeof(unsigned int), 1, fp) != 1)
+		return FALSE;
+	if (fwrite(&doc->wordstats_capacity, sizeof(unsigned int), 1, fp) != 1)
+		return FALSE;
 
-	fprintf(fp, "%u %u\n", doc->wordstats_length, doc->wordstats_capacity);
-	fprintf(fp, "%u %u\n", doc->documents_length, doc->documents_capacity);
-	fprintf(fp, "%u %u\n", doc->words_length, doc->words_capacity);
+	if (fwrite(&doc->documents_length, sizeof(unsigned int), 1, fp) != 1)
+		return FALSE;
+	if (fwrite(&doc->documents_capacity, sizeof(unsigned int), 1, fp) != 1)
+		return FALSE;
+
+	if (fwrite(&doc->words_length, sizeof(unsigned int), 1, fp) != 1)
+		return FALSE;
+	if (fwrite(&doc->words_capacity, sizeof(unsigned int), 1, fp) != 1)
+		return FALSE;
 
 	if (!hashtable_save(fp, &doc->ignored,
 	                    &hashtable_save_uintval, NULL))
@@ -391,22 +399,17 @@ int docinfo_save(FILE *fp, docinfo *doc)
 	                    &hashtable_save_uintval, NULL))
 		return FALSE;
 
-	for (i = 0; i < doc->wordstats_length; i++) {
-		wordstats = &doc->wordstats[i];
-		fprintf(fp, "%u %u %u %u\n", wordstats->document,
-		        wordstats->word, wordstats->count, wordstats->next);
-	}
+	if (fwrite(doc->wordstats, sizeof(docinfo_wordstats),
+	           doc->wordstats_length, fp) != doc->wordstats_length)
+		return FALSE;
 
-	for (i = 0; i < doc->documents_length; i++) {
-		document = &doc->documents[i];
-		fprintf(fp, "%u %u %u\n", document->doc_id,
-		        document->word_count, document->words);
-	}
+	if (fwrite(doc->documents, sizeof(docinfo_document),
+	           doc->documents_length, fp) != doc->documents_length)
+		return FALSE;
 
-	for (i = 0; i < doc->words_length; i++) {
-		fprintf(fp, "%u ", doc->words[i]);
-	}
-	fprintf(fp, "\n");
+	if (fwrite(doc->words, sizeof(unsigned int),
+	           doc->words_length, fp) != doc->words_length)
+		return FALSE;
 
 	return TRUE;
 }
@@ -415,27 +418,32 @@ static
 int hashtable_load_uintval(FILE *fp, hashtable *ht,
                            hashtable_entry *entry, void *arg)
 {
-	if (fscanf(fp, "%u", &entry->val.uintval) != 1)
+	if (fread(&entry->val.uintval, sizeof(unsigned int), 1, fp) != 1)
 		return FALSE;
 	return TRUE;
 }
 
 int docinfo_load(FILE *fp, docinfo *doc)
 {
-	unsigned int i;
 	unsigned int wordstats_length, wordstats_capacity;
 	unsigned int documents_length, documents_capacity;
 	unsigned int words_length, words_capacity;
-	docinfo_wordstats *wordstats;
-	docinfo_document *document;
 
 	docinfo_reset(doc);
 
-	if (fscanf(fp, "%u %u", &wordstats_length, &wordstats_capacity) != 2)
+	if (fread(&wordstats_length, sizeof(unsigned int), 1, fp) != 1)
 		return FALSE;
-	if (fscanf(fp, "%u %u", &documents_length, &documents_capacity) != 2)
+	if (fread(&wordstats_capacity, sizeof(unsigned int), 1, fp) != 1)
 		return FALSE;
-	if (fscanf(fp, "%u %u", &words_length, &words_capacity) != 2)
+
+	if (fread(&documents_length, sizeof(unsigned int), 1, fp) != 1)
+		return FALSE;
+	if (fread(&documents_capacity, sizeof(unsigned int), 1, fp) != 1)
+		return FALSE;
+
+	if (fread(&words_length, sizeof(unsigned int), 1, fp) != 1)
+		return FALSE;
+	if (fread(&words_capacity, sizeof(unsigned int), 1, fp) != 1)
 		return FALSE;
 
 	if (!docinfo_initialize_aux(doc, wordstats_capacity,
@@ -451,27 +459,19 @@ int docinfo_load(FILE *fp, docinfo *doc)
 		goto error_load;
 
 	doc->wordstats_length = wordstats_length;
-	for (i = 0; i < wordstats_length; i++) {
-		wordstats = &doc->wordstats[i];
-		if (fscanf(fp, "%u %u %u %u", &wordstats->document,
-		           &wordstats->word, &wordstats->count,
-		           &wordstats->next) != 4)
-			goto error_load;
-	}
+	if (fread(doc->wordstats, sizeof(docinfo_wordstats),
+	          doc->wordstats_length, fp) != doc->wordstats_length)
+		return FALSE;
 
 	doc->documents_length = documents_length;
-	for (i = 0; i < documents_length; i++) {
-		document = &doc->documents[i];
-		if (fscanf(fp, "%u %u %u", &document->doc_id,
-		           &document->word_count, &document->words) != 3)
-			goto error_load;
-	}
+	if (fread(doc->documents, sizeof(docinfo_document),
+	          doc->documents_length, fp) != doc->documents_length)
+		return FALSE;
 
 	doc->words_length = words_length;
-	for (i = 0; i < words_length; i++) {
-		if (fscanf(fp, "%u", &doc->words[i]) != 1)
-			goto error_load;
-	}
+	if (fread(doc->words, sizeof(unsigned int),
+	          doc->words_length, fp) != doc->words_length)
+		return FALSE;
 
 	return TRUE;
 

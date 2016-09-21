@@ -219,27 +219,36 @@ unsigned long hashtable_hash(const char *str)
 int hashtable_save(FILE *fp, hashtable *ht,
                    hashtable_callback_fn cb, void *arg)
 {
-	unsigned int i, j;
+	unsigned int i;
 	hashtable_entry *entry;
 
-	fprintf(fp, "%u\n", ht->table_size);
-	fprintf(fp, "%u %u\n", ht->entries_length, ht->entries_capacity);
-	fprintf(fp, "%u %u\n", ht->strs_length, ht->strs_capacity);
+	if (fwrite(&ht->table_size, sizeof(unsigned int), 1, fp) != 1)
+		return FALSE;
+	if (fwrite(&ht->entries_length, sizeof(unsigned int), 1, fp) != 1)
+		return FALSE;
+	if (fwrite(&ht->entries_capacity, sizeof(unsigned int), 1, fp) != 1)
+		return FALSE;
+	if (fwrite(&ht->strs_length, sizeof(unsigned int), 1, fp) != 1)
+		return FALSE;
+	if (fwrite(&ht->strs_capacity, sizeof(unsigned int), 1, fp) != 1)
+		return FALSE;
 
 	for (i = 0; i < ht->entries_length; i++) {
 		entry = &ht->entries[i];
-		fprintf(fp, "%u %u %u ", entry->hash,
-		        entry->str, entry->count);
+		if (fwrite(&entry->hash, sizeof(unsigned int), 1, fp) != 1)
+			return FALSE;
+		if (fwrite(&entry->str, sizeof(unsigned int), 1, fp) != 1)
+			return FALSE;
+		if (fwrite(&entry->count, sizeof(unsigned int), 1, fp) != 1)
+			return FALSE;
+
 		if (!cb(fp, ht, entry, arg))
 			return FALSE;
-		fprintf(fp, "\n");
 	}
 
-	for (j = 0; j < ht->strs_length; j++) {
-		unsigned char c = (unsigned char) ht->strs[j];
-		fprintf(fp, "%u ", (unsigned int) c);
-	}
-	fprintf(fp, "\n");
+	if (fwrite(ht->strs, sizeof(char), ht->strs_length, fp)
+	    != ht->strs_length)
+		return FALSE;
 
 	return TRUE;
 }
@@ -247,19 +256,21 @@ int hashtable_save(FILE *fp, hashtable *ht,
 int hashtable_load(FILE *fp, hashtable *ht,
                    hashtable_callback_fn cb, void *arg)
 {
-	unsigned int i, j, idx;
+	unsigned int i, idx;
 	unsigned int table_size;
 	unsigned int entries_length, strs_length;
 	unsigned int entries_capacity, strs_capacity;
 	hashtable_entry *entry;
 
-	if (fscanf(fp, "%u", &table_size) != 1)
+	if (fread(&table_size, sizeof(unsigned int), 1, fp) != 1)
 		return FALSE;
-
-	if (fscanf(fp, "%u %u", &entries_length, &entries_capacity) != 2)
+	if (fread(&entries_length, sizeof(unsigned int), 1, fp) != 1)
 		return FALSE;
-
-	if (fscanf(fp, "%u %u", &strs_length, &strs_capacity) != 2)
+	if (fread(&entries_capacity, sizeof(unsigned int), 1, fp) != 1)
+		return FALSE;
+	if (fread(&strs_length, sizeof(unsigned int), 1, fp) != 1)
+		return FALSE;
+	if (fread(&strs_capacity, sizeof(unsigned int), 1, fp) != 1)
 		return FALSE;
 
 	if (!hashtable_initialize_aux(ht, table_size, entries_capacity,
@@ -271,8 +282,11 @@ int hashtable_load(FILE *fp, hashtable *ht,
 	ht->entries_length = entries_length;
 	for (i = 0; i < entries_length; i++) {
 		entry = &ht->entries[i];
-		if (fscanf(fp, "%u %u %u", &entry->hash, &entry->str,
-		           &entry->count) != 3)
+		if (fread(&entry->hash, sizeof(unsigned int), 1, fp) != 1)
+			goto error_load;
+		if (fread(&entry->str, sizeof(unsigned int), 1, fp) != 1)
+			goto error_load;
+		if (fread(&entry->count, sizeof(unsigned int), 1, fp) != 1)
 			goto error_load;
 
 		if (!cb(fp, ht, entry, arg))
@@ -284,17 +298,13 @@ int hashtable_load(FILE *fp, hashtable *ht,
 	}
 
 	ht->strs_length = strs_length;
-	for (j = 0; j < strs_length; j++) {
-		unsigned int c;
-		if (fscanf(fp, "%u", &c) != 1)
-			goto error_load;
-		ht->strs[j] = (char) c;
-	}
+	if (fread(ht->strs, sizeof(char), strs_length, fp) != strs_length)
+		goto error_load;
 
 	return TRUE;
 
 error_load:
-	error("could not load hash table");
+	error("could not load hashtable");
 	hashtable_cleanup(ht);
 	return FALSE;
 }

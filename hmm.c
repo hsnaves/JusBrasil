@@ -458,67 +458,56 @@ void hmm_generate_text(hmm *h, docinfo *doc)
 
 int hmm_save(FILE *fp, hmm *h)
 {
-	unsigned int i, j, k, pos, pos2;
+	unsigned int nmemb;
 
-	fprintf(fp, "%u %u %u\n", h->num_words,
-	       h->num_documents, h->num_states);
-	for (i = 0; i < h->num_states; i++) {
-		for (j = 0; j < h->num_states; j++) {
-			pos = i * h->num_states + j;
-			if (fabs(h->ss[pos]) < EPS)
-				fprintf(fp, "0 ");
-			else
-				fprintf(fp, "%g ", h->ss[pos]);
-		}
-		fprintf(fp, "\n");
-	}
-	for (j = 0; j < h->num_states; j++) {
-		for (k = 0; k < h->num_words; k++) {
-			pos2 = j * h->num_words + k;
-			if (fabs(h->sw[pos2]) < EPS)
-				fprintf(fp, "0 ");
-			else
-				fprintf(fp, "%g ", h->sw[pos2]);
-		}
-		fprintf(fp, "\n");
-	}
+	if (fwrite(&h->num_words, sizeof(unsigned int), 1, fp) != 1)
+		return FALSE;
+	if (fwrite(&h->num_documents, sizeof(unsigned int), 1, fp) != 1)
+		return FALSE;
+	if (fwrite(&h->num_states, sizeof(unsigned int), 1, fp) != 1)
+		return FALSE;
+
+	nmemb = h->num_states * h->num_states;
+	if (fwrite(h->ss, sizeof(double), nmemb, fp) != nmemb)
+		return FALSE;
+
+	nmemb = h->num_states * h->num_words;
+	if (fwrite(h->sw, sizeof(double), nmemb, fp) != nmemb)
+		return FALSE;
+
 	return TRUE;
 }
 
 int hmm_load(FILE *fp, hmm *h)
 {
-	unsigned int i, j, k, pos, pos2;
-	unsigned int num_words, num_documents, num_states;
+	unsigned int nmemb, num_words, num_documents, num_states;
 
 	hmm_reset(h);
 	if (!hmm_initialize(h))
 		return FALSE;
 
-	if (fscanf(fp, "%u %u %u\n", &num_words,
-	           &num_documents, &num_states) != 3)
+	if (fread(&num_words, sizeof(unsigned int), 1, fp) != 1)
+		return FALSE;
+	if (fread(&num_documents, sizeof(unsigned int), 1, fp) != 1)
+		return FALSE;
+	if (fread(&num_states, sizeof(unsigned int), 1, fp) != 1)
 		return FALSE;
 
 	if (!hmm_allocate_tables(h, num_words, num_documents, num_states))
+		return FALSE;
+
+	nmemb = h->num_states * h->num_states;
+	if (fread(h->ss, sizeof(double), nmemb, fp) != nmemb)
 		goto error_load;
 
-	for (i = 0; i < h->num_states; i++) {
-		for (j = 0; j < h->num_states; j++) {
-			pos = i * h->num_states + j;
-			if (fscanf(fp, "%lf", &h->ss[pos]) != 1)
-				goto error_load;
-		}
-	}
-	for (j = 0; j < h->num_states; j++) {
-		for (k = 0; k < h->num_words; k++) {
-			pos2 = j * h->num_words + k;
-			if (fscanf(fp, "%lf", &h->sw[pos2]) != 1)
-				goto error_load;
-		}
-	}
+	nmemb = h->num_states * h->num_words;
+	if (fread(h->sw, sizeof(double), nmemb, fp) != nmemb)
+		goto error_load;
+
 	return TRUE;
 
 error_load:
-	error("could not load PLSA");
+	error("could not load HMM");
 	hmm_cleanup(h);
 	return FALSE;
 }

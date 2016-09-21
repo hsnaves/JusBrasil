@@ -311,63 +311,52 @@ int plsa_print_best(plsa *pl, docinfo *doc, unsigned top_words,
 
 int plsa_save(FILE *fp, plsa *pl)
 {
-	unsigned int i, j, k, pos, pos2;
+	unsigned int nmemb;
 
-	fprintf(fp, "%u %u %u\n", pl->num_words,
-	       pl->num_documents, pl->num_topics);
-	for (i = 0; i < pl->num_documents; i++) {
-		for (j = 0; j < pl->num_topics; j++) {
-			pos = i * pl->num_topics + j;
-			if (fabs(pl->dt[pos]) < EPS)
-				fprintf(fp, "0 ");
-			else
-				fprintf(fp, "%g ", pl->dt[pos]);
-		}
-		fprintf(fp, "\n");
-	}
-	for (j = 0; j < pl->num_topics; j++) {
-		for (k = 0; k < pl->num_words; k++) {
-			pos2 = j * pl->num_words + k;
-			if (fabs(pl->tw[pos2]) < EPS)
-				fprintf(fp, "0 ");
-			else
-				fprintf(fp, "%g ", pl->tw[pos2]);
-		}
-		fprintf(fp, "\n");
-	}
+	if (fwrite(&pl->num_words, sizeof(unsigned int), 1, fp) != 1)
+		return FALSE;
+	if (fwrite(&pl->num_documents, sizeof(unsigned int), 1, fp) != 1)
+		return FALSE;
+	if (fwrite(&pl->num_topics, sizeof(unsigned int), 1, fp) != 1)
+		return FALSE;
+
+	nmemb = pl->num_documents * pl->num_topics;
+	if (fwrite(pl->dt, sizeof(double), nmemb, fp) != nmemb)
+		return FALSE;
+
+	nmemb = pl->num_topics * pl->num_words;
+	if (fwrite(pl->tw, sizeof(double), nmemb, fp) != nmemb)
+		return FALSE;
+
 	return TRUE;
 }
 
 int plsa_load(FILE *fp, plsa *pl)
 {
-	unsigned int i, j, k, pos, pos2;
-	unsigned int num_words, num_documents, num_topics;
+	unsigned int nmemb, num_words, num_documents, num_topics;
 
 	plsa_reset(pl);
 	if (!plsa_initialize(pl))
 		return FALSE;
 
-	if (fscanf(fp, "%u %u %u\n", &num_words,
-	           &num_documents, &num_topics) != 3)
+	if (fread(&num_words, sizeof(unsigned int), 1, fp) != 1)
+		return FALSE;
+	if (fread(&num_documents, sizeof(unsigned int), 1, fp) != 1)
+		return FALSE;
+	if (fread(&num_topics, sizeof(unsigned int), 1, fp) != 1)
 		return FALSE;
 
 	if (!plsa_allocate_tables(pl, num_words, num_documents, num_topics))
 		goto error_load;
 
-	for (i = 0; i < pl->num_documents; i++) {
-		for (j = 0; j < pl->num_topics; j++) {
-			pos = i * pl->num_topics + j;
-			if (fscanf(fp, "%lf", &pl->dt[pos]) != 1)
-				goto error_load;
-		}
-	}
-	for (j = 0; j < pl->num_topics; j++) {
-		for (k = 0; k < pl->num_words; k++) {
-			pos2 = j * pl->num_words + k;
-			if (fscanf(fp, "%lf", &pl->tw[pos2]) != 1)
-				goto error_load;
-		}
-	}
+	nmemb = pl->num_documents * pl->num_topics;
+	if (fread(pl->dt, sizeof(double), nmemb, fp) != nmemb)
+		goto error_load;
+
+	nmemb = pl->num_topics * pl->num_words;
+	if (fread(pl->tw, sizeof(double), nmemb, fp) != nmemb)
+		goto error_load;
+
 	return TRUE;
 
 error_load:
@@ -404,6 +393,7 @@ int train_dataset(const char *directory, unsigned int num_files,
 	if (!plsa_train(&pl, &doc, num_topics, max_iter, tol))
 		goto error_train;
 
+	printf("Saving PLSA to `%s'...\n", plsa_file);
 	fp = fopen(plsa_file, "wb");
 	if (!fp) {
 		error("could not save `%s'", plsa_file);
@@ -412,6 +402,7 @@ int train_dataset(const char *directory, unsigned int num_files,
 	plsa_save(fp, &pl);
 	fclose(fp);
 
+	printf("Saving DOCINFO to `%s'...\n", docinfo_file);
 	fp = fopen(docinfo_file, "wb");
 	if (!fp) {
 		error("could not save `%s'", docinfo_file);
@@ -442,6 +433,7 @@ int print_results(const char *docinfo_file, const char *plsa_file,
 	docinfo_reset(&doc);
 	plsa_reset(&pl);
 
+	printf("Loading PLSA from `%s'...\n", plsa_file);
 	fp = fopen(plsa_file, "rb");
 	if (!fp) {
 		error("could not load `%s'", plsa_file);
@@ -453,6 +445,7 @@ int print_results(const char *docinfo_file, const char *plsa_file,
 	}
 	fclose(fp);
 
+	printf("Loading DOCINFO from `%s'...\n", docinfo_file);
 	fp = fopen(docinfo_file, "rb");
 	if (!fp) {
 		error("could not load `%s'", docinfo_file);
@@ -484,7 +477,7 @@ int main(int argc, char **argv)
 
 	genrand_randomize();
 
-#if 1
+#if 0
 	train_dataset("texts", 54562, 80, 1000, 0.001, "result.docinfo",
 	              "result.plsa");
 #else
