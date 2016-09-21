@@ -496,3 +496,49 @@ int docinfo_load_easy(docinfo *doc, const char *filename)
 	fclose(fp);
 	return ret;
 }
+
+int docinfo_build_cached(docinfo *doc, const char *docinfo_file,
+                         const char *master_file, const char *ignore_file)
+{
+	FILE *fp;
+	int ret;
+
+	docinfo_reset(doc);
+	if (docinfo_file) {
+		fp = fopen(docinfo_file, "rb");
+		if (fp) {
+			printf("Loading DOCINFO `%s'...\n", docinfo_file);
+			ret = docinfo_load(doc, fp);
+			fclose(fp);
+			return ret;
+		}
+	}
+
+	if (!docinfo_initialize(doc))
+		return FALSE;
+
+	if (ignore_file) {
+		if (!docinfo_add_ignored_from_file(doc, ignore_file)) {
+			docinfo_cleanup(doc);
+			return FALSE;
+		}
+	}
+
+	printf("Building DOCINFO from `%s'...\n", master_file);
+	if (!docinfo_process_file(doc, master_file, TRUE)) {
+		docinfo_cleanup(doc);
+		return FALSE;
+	}
+	printf("Num documents: %u\n", docinfo_num_documents(doc));
+	printf("Num different words: %u\n", docinfo_num_different_words(doc));
+	printf("Num wordstats: %u\n", docinfo_num_wordstats(doc));
+	printf("Total word count: %u\n", docinfo_num_words(doc));
+
+	printf("Saving DOCINFO `%s'...\n", docinfo_file);
+	if (!docinfo_save_easy(doc, docinfo_file)) {
+		docinfo_cleanup(doc);
+		return FALSE;
+	}
+
+	return TRUE;
+}

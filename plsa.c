@@ -93,7 +93,7 @@ void plsa_initialize_random(plsa *pl)
 }
 
 static
-double plsa_iteration(plsa *pl, docinfo *doc, double *dt, double *tw,
+double plsa_iteration(plsa *pl, const docinfo *doc, double *dt, double *tw,
                       double *dt_old, double *tw_old)
 {
 	unsigned pos, pos2;
@@ -183,7 +183,7 @@ int plsa_allocate_tables(plsa *pl, unsigned int num_words,
 	return TRUE;
 }
 
-int plsa_train(plsa *pl, docinfo *doc, unsigned int num_topics,
+int plsa_train(plsa *pl, const docinfo *doc, unsigned int num_topics,
                unsigned int max_iterations, double tol)
 {
 	double likelihood, old_likelihood;
@@ -393,58 +393,47 @@ int plsa_load_easy(plsa *pl, const char *filename)
 	return ret;
 }
 
-static
-int train_dataset(const char *training_file, unsigned int num_topics,
-                  unsigned int max_iter, double tol,
-                  const char *docinfo_file, const char *plsa_file,
-                  const char *ignore_file)
+int plsa_build_cached(plsa *pl, const char *plsa_file, const docinfo *doc,
+                      unsigned int num_topics, unsigned int max_iter,
+                      double tol)
 {
-	docinfo doc;
-	plsa pl;
+	FILE *fp;
+	int ret;
 
-	docinfo_reset(&doc);
-	plsa_reset(&pl);
-
-	if (!docinfo_initialize(&doc))
-		goto error_train;
-
-	if (!plsa_initialize(&pl))
-		goto error_train;
-
-	if (ignore_file) {
-		if (!docinfo_add_ignored_from_file(&doc, ignore_file))
-			goto error_train;
+	plsa_reset(pl);
+	if (plsa_file) {
+		fp = fopen(plsa_file, "rb");
+		if (fp) {
+			printf("Loading PLSA `%s'...\n", plsa_file);
+			ret = plsa_load(pl, fp);
+			fclose(fp);
+			return ret;
+		}
 	}
 
-	if (!docinfo_process_file(&doc, training_file, TRUE))
-		goto error_train;
+	if (!plsa_initialize(pl))
+		return FALSE;
 
-	printf("\n");
-	if (!plsa_train(&pl, &doc, num_topics, max_iter, tol))
-		goto error_train;
+	if (!plsa_train(pl, doc, num_topics, max_iter, tol)) {
+		plsa_cleanup(pl);
+		return FALSE;
+	}
 
-	printf("Saving PLSA to `%s'...\n", plsa_file);
-	if (!plsa_save_easy(&pl, plsa_file))
-		goto error_train;
+	printf("Saving PLSA `%s'...\n", plsa_file);
+	if (!plsa_save_easy(pl, plsa_file)) {
+		plsa_cleanup(pl);
+		return FALSE;
+	}
 
-	printf("Saving DOCINFO to `%s'...\n", docinfo_file);
-	if (!docinfo_save_easy(&doc, docinfo_file))
-		goto error_train;
-
-	docinfo_cleanup(&doc);
-	plsa_cleanup(&pl);
 	return TRUE;
-
-error_train:
-	docinfo_cleanup(&doc);
-	plsa_cleanup(&pl);
-	return FALSE;
 }
 
 static
-int print_results(const char *docinfo_file, const char *plsa_file,
-                  unsigned int top_words, unsigned int top_topics,
-                  unsigned int num_documents)
+int do_main(const char *docinfo_file, const char *training_file,
+            const char *ignore_file, const char *plsa_file,
+            unsigned int num_topics, unsigned int max_iter, double tol,
+            unsigned int top_words, unsigned int top_topics,
+            unsigned int num_documents)
 {
 	docinfo doc;
 	plsa pl;
@@ -452,20 +441,23 @@ int print_results(const char *docinfo_file, const char *plsa_file,
 	docinfo_reset(&doc);
 	plsa_reset(&pl);
 
-	printf("Loading PLSA from `%s'...\n", plsa_file);
-	if (!plsa_load_easy(&pl, plsa_file))
-		goto error_print;
+	if (!docinfo_build_cached(&doc, docinfo_file,
+	                          training_file, ignore_file))
+		goto error_main;
 
-	printf("Loading DOCINFO from `%s'...\n", docinfo_file);
-	if (!docinfo_load_easy(&doc, docinfo_file))
-		goto error_print;
+	if (!plsa_build_cached(&pl, plsa_file, &doc,
+	                       num_topics, max_iter, tol))
+		goto error_main;
 
-	if (!plsa_print_best(&pl,  &doc, top_words, top_topics, num_documents))
-		goto error_print;
+	if (!plsa_print_best(&pl,  &doc, top_words,
+	                     top_topics, num_documents))
+		goto error_main;
 
+	docinfo_cleanup(&doc);
+	plsa_cleanup(&pl);
 	return TRUE;
 
-error_print:
+error_main:
 	docinfo_cleanup(&doc);
 	plsa_cleanup(&pl);
 	return FALSE;
@@ -480,11 +472,7 @@ int main(int argc, char **argv)
 
 	genrand_randomize();
 
-#if 1
-	train_dataset("texts/training.txt", 80, 1000, 0.001, "result.docinfo",
-	              "result.plsa", "ignore.txt");
-#else
-	print_results("result.docinfo", "result.plsa", 30, 5, 100);
-#endif
+	do_main("result.docinfo", "texts/training.txt", "ignore.txt",
+	        "result.plsa", 80, 1000, 0.001, 30, 5, 100);
 	return 0;
 }

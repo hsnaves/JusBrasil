@@ -69,5 +69,8 @@ int docinfo_save_easy(docinfo *doc, const char *filename);
 int docinfo_load(docinfo *doc, FILE *fp);
 int docinfo_load_easy(docinfo *doc, const char *filename);
 
+int docinfo_build_cached(docinfo *doc, const char *docinfo_file,
+                         const char *master_file, const char *ignore_file);
+
 
 #endif /* __DOCINFO_H */
