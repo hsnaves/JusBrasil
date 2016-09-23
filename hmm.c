@@ -5,6 +5,7 @@
 #include <math.h>
 
 #include "hmm.h"
+#include "args.h"
 #include "docinfo.h"
 #include "utils.h"
 #include "random.h"
@@ -210,7 +211,7 @@ int hmm_allocate_dp_tables(hmm *h, unsigned int max_document_length)
 }
 
 static
-void hmm_compute_dp_tables(hmm *h, docinfo *doc, unsigned int doc_idx)
+void hmm_compute_dp_tables(hmm *h, const docinfo *doc, unsigned int doc_idx)
 {
 	docinfo_document *document;
 	unsigned int i, j, k, l;
@@ -281,7 +282,7 @@ void hmm_compute_dp_tables(hmm *h, docinfo *doc, unsigned int doc_idx)
 }
 
 static
-double hmm_iteration(hmm *h, docinfo *doc)
+double hmm_iteration(hmm *h, const docinfo *doc)
 {
 	unsigned int i;
 	for (i = 0; i < docinfo_num_documents(doc); i++) {
@@ -290,7 +291,7 @@ double hmm_iteration(hmm *h, docinfo *doc)
 	return 0;
 }
 
-int hmm_train(hmm *h, docinfo *doc, unsigned int num_states,
+int hmm_train(hmm *h, const docinfo *doc, unsigned int num_states,
               unsigned int max_iterations, double tol)
 {
 	double likelihood, old_likelihood;
@@ -540,14 +541,133 @@ int hmm_load_easy(hmm *h, const char *filename)
 	return ret;
 }
 
+int hmm_build_cached(hmm *h, const char *hmm_file, const docinfo *doc,
+                     unsigned int num_states, unsigned int max_iter,
+                     double tol)
+{
+	FILE *fp;
+	int ret;
+
+	hmm_reset(h);
+	if (hmm_file) {
+		fp = fopen(hmm_file, "rb");
+		if (fp) {
+			printf("Loading HMM `%s'...\n", hmm_file);
+			ret = hmm_load(h, fp);
+			fclose(fp);
+			return ret;
+		}
+	}
+
+	if (!hmm_initialize(h))
+		return FALSE;
+
+	if (!hmm_train(h, doc, num_states, max_iter, tol)) {
+		hmm_cleanup(h);
+		return FALSE;
+	}
+
+	if (hmm_file) {
+		printf("Saving HMM `%s'...\n", hmm_file);
+		if (!hmm_save_easy(h, hmm_file)) {
+			hmm_cleanup(h);
+			return FALSE;
+		}
+	}
+
+	return TRUE;
+}
+
+static
+int do_main(const char *docinfo_file, const char *training_file,
+            const char *ignore_file, const char *hmm_file,
+            unsigned int num_states, unsigned int max_iter, double tol)
+{
+	docinfo doc;
+	hmm h;
+
+	docinfo_reset(&doc);
+	hmm_reset(&h);
+
+	if (!docinfo_build_cached(&doc, docinfo_file,
+	                          training_file, ignore_file))
+		goto error_main;
+
+	if (!hmm_build_cached(&h, hmm_file, &doc,
+	                      num_states, max_iter, tol))
+		goto error_main;
+
+	docinfo_cleanup(&doc);
+	hmm_cleanup(&h);
+	return TRUE;
+
+error_main:
+	docinfo_cleanup(&doc);
+	hmm_cleanup(&h);
+	return FALSE;
+}
 
 int main(int argc, char **argv)
 {
+	char *docinfo_file, *hmm_file;
+	char *training_file, *ignore_file;
+	unsigned int num_states, max_iter;
+	double tol;
+	option opts[] = {
+		{ "-d", NULL, ARGTYPE_FILE,
+		  "specify the DOCINFO file" },
+		{ "-t", NULL, ARGTYPE_FILE,
+		  "specify the training file" },
+		{ "-i", NULL, ARGTYPE_FILE,
+		  "specify the ignore file" },
+		{ "-h", NULL, ARGTYPE_FILE,
+		  "specify the HMM file" },
+		{ "-q", NULL, ARGTYPE_UINT,
+		  "the number of states" },
+		{ "-m", NULL, ARGTYPE_UINT,
+		  "the maximum number of iterations" },
+		{ "-e", NULL, ARGTYPE_DBL,
+		  "the tolerance for convergence" },
+		{ "--help", NULL, ARGTYPE_NONE,
+		  "print this help" },
+	};
+	unsigned int num_opts;
+	int ret;
+
 #if 1
 	setvbuf(stdout, 0, _IONBF, 0);
 	setvbuf(stderr, 0, _IONBF, 0);
 #endif
 
+	opts[0].ptr = &docinfo_file;
+	opts[1].ptr = &training_file;
+	opts[2].ptr = &ignore_file;
+	opts[3].ptr = &hmm_file;
+	opts[4].ptr = &num_states;
+	opts[5].ptr = &max_iter;
+	opts[6].ptr = &tol;
+
 	genrand_randomize();
+
+	docinfo_file = NULL;
+	hmm_file = NULL;
+	training_file = NULL;
+	ignore_file = NULL;
+	num_states = 0;
+	max_iter = 0;
+	tol = 0;
+
+	num_opts = sizeof(opts) / sizeof(option);
+	if (argc == 1) {
+		print_help(argv[0], opts, num_opts);
+		return 0;
+	}
+	ret = process_args(argc, argv, opts, num_opts);
+	if (ret <= 0) return ret;
+
+	if (!do_main(docinfo_file, training_file, ignore_file,
+	             hmm_file, num_states, max_iter, tol))
+		return -1;
+
 	return 0;
 }

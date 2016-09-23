@@ -31,7 +31,7 @@ void hmm_reset(hmm *h);
 int hmm_initialize(hmm *h);
 void hmm_cleanup(hmm *h);
 
-int hmm_train(hmm *h, docinfo *doc, unsigned int num_states,
+int hmm_train(hmm *h, const docinfo *doc, unsigned int num_states,
               unsigned int max_iterations, double tol);
 int hmm_optimize_generator(hmm *h);
 void hmm_generate_text(const hmm *h, const docinfo *doc);

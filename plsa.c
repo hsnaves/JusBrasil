@@ -607,8 +607,10 @@ int main(int argc, char **argv)
 	ret = process_args(argc, argv, opts, num_opts);
 	if (ret <= 0) return ret;
 
-	do_main(docinfo_file, training_file, ignore_file,
-	        plsa_file, num_topics, max_iter, tol,
-	        top_words, test_file, top_topics);
+	if (!do_main(docinfo_file, training_file, ignore_file,
+	             plsa_file, num_topics, max_iter, tol,
+	             top_words, test_file, top_topics))
+		return -1;
+
 	return 0;
 }
