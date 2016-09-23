@@ -14,10 +14,18 @@ To build the code, you will simply type:
 
 Then run:
 
-    $ ./plsa -d <docinfo_file> -t <training_file> -i <ignore_file> -p <plsa_file> -q <num_topics> -m <max_iter> -e <tol> -w <top_words> -y <test_file> -z <top_topics>
+    $ ./plsa --help
 
 or
 
-    $ ./hmm
+    $ ./hmm --help
 
+To compile the python module, type:
+
+    $ cd python
+    $ python setup.py build_ext --inplace
+
+and to run:
+
+    $ python test_plsa.py -h
 

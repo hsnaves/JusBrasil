@@ -75,8 +75,11 @@ def plsa_iteration(int[:] words, int[:] documents, DTYPE_t[:] weights,
 	cdef DTYPE_t w, dotprod, val
 	cdef int idx, topic
 
-	DT2.fill(0.0)
-	TW2.fill(0.0)
+	if not DT2 is None:
+		DT2.fill(0.0)
+	if not TW2 is None:
+		TW2.fill(0.0)
+
 	for idx in range(words.shape[0]):
 		word = words[idx]
 		document = documents[idx]
@@ -89,11 +92,15 @@ def plsa_iteration(int[:] words, int[:] documents, DTYPE_t[:] weights,
 		for topic in range(num_topics):
 			val =w * DT[document, topic] * \
 				TW[topic, word] / dotprod
-			DT2[document, topic] += val
-			TW2[topic, word] += val
+			if not DT2 is None:
+				DT2[document, topic] += val
+			if not TW2 is None:
+				TW2[topic, word] += val
 
-	normalize_rows(DT2)
-	normalize_rows(TW2)
+	if not DT2 is None:
+		normalize_rows(DT2)
+	if not TW2 is None:
+		normalize_rows(TW2)
 
 	return likelihood / total_weight
 
@@ -135,6 +142,7 @@ def plsa_train(int[:] words, int[:] documents, DTYPE_t[:] weights,
 	cdef DTYPE_t likelihood
 	cdef int it = 0
 
+	print "PLSA traininig..."
 	while it < max_iter:
 		likelihood = plsa_iteration(words, documents, weights,
 		                            num_topics, DT1, TW1, DT2, TW2)
@@ -151,4 +159,52 @@ def plsa_train(int[:] words, int[:] documents, DTYPE_t[:] weights,
 
 	return DT1, TW1
 
+def plsa_retrain(int[:] words, int[:] documents, DTYPE_t[:] weights,
+                 int num_documents, np.ndarray[DTYPE_t, ndim = 2] TW,
+                 DTYPE_t tol = 1e-4, int max_iter = 300):
+	'''PLSA retraining algorithm.
 
+	Args:
+		words (array of int): the list of words in the occurrences.
+		documents (array of int): the list of documents in the
+			occurrences.
+		weights (array of int): the weight of the occurrence.
+		num_documents (int): the number of distict documents.
+		TW (numpy.array): the TW matrix returned by `plsa_train`.
+		tol (float): the tolerance criterion. We stop
+			the iterations once the average log-likelihood
+			changes by at most `tol'.
+		max_iter (int): the maximum number of iterations
+			of the algorithm
+
+	Returns:
+		The updated DT matrix.
+	'''
+	cdef int num_words = TW.shape[1]
+	cdef int num_topics = TW.shape[0]
+	# Generates random matrices as initial conditional probabilities
+	cdef np.ndarray[DTYPE_t, ndim = 2] DT1 = \
+	    generate_random_matrix(num_documents, num_topics)
+
+	cdef np.ndarray[DTYPE_t, ndim=2] DT2 = \
+	    np.zeros((num_documents, num_topics), dtype=DTYPE)
+
+	cdef DTYPE_t old_likelihood = -100.0 * tol
+	cdef DTYPE_t likelihood
+	cdef int it = 0
+
+	print "PLSA retraininig..."
+	while it < max_iter:
+		likelihood = plsa_iteration(words, documents, weights,
+		                            num_topics, DT1, TW, DT2, None)
+
+		DT1, DT2 = DT2, DT1
+
+		it += 1
+		print "Iteration %d: likelihood = %f" % (it, likelihood)
+
+		if math.fabs(old_likelihood - likelihood) < tol:
+			break
+		old_likelihood = likelihood
+
+	return DT1
