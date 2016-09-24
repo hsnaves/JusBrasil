@@ -10,6 +10,8 @@
 #include "utils.h"
 #include "random.h"
 
+#define EPS 1e-12
+
 void hmm_reset(hmm *h)
 {
 	h->ss = NULL;
@@ -78,7 +80,6 @@ void hmm_cleanup_dp_tables(hmm *h)
 	}
 }
 
-
 static
 void hmm_cleanup_optimization_tables(hmm *h)
 {
@@ -116,25 +117,50 @@ void hmm_cleanup(hmm *h)
 }
 
 static
-void hmm_initialize_random(hmm *h)
+void hmm_normalize_tables(hmm *h, double *ss, double *sw)
 {
 	unsigned int i, j, k, pos;
 	double sum;
 
 	for (i = 0; i < h->num_states; i++) {
 		sum = 0;
+		for (j = 0; j < h->num_states; j++) {
+			pos = i * h->num_states + j;
+			sum += ss[pos];
+		}
+		if (fabs(sum) >= EPS) {
+			for (j = 0; j < h->num_states; j++) {
+				pos = i * h->num_states + j;
+				ss[pos] /= sum;
+			}
+		}
 
+		sum = 0;
+		for (k = 0; k < h->num_words; k++) {
+			pos = i * h->num_words + k;
+			sum += sw[pos];
+		}
+		if (fabs(sum) >= EPS) {
+			for (k = 0; k < h->num_words; k++) {
+				pos = i * h->num_words + k;
+				sw[pos] /= sum;
+			}
+		}
+	}
+}
+
+static
+void hmm_initialize_random(hmm *h)
+{
+	unsigned int i, j, k, pos;
+
+	for (i = 0; i < h->num_states; i++) {
 		pos = i * h->num_states;
 		h->ss[pos] = 0.0;
 		if (i != 1) {
 			for (j = 1; j < h->num_states; j++) {
 				pos = i * h->num_states + j;
 				h->ss[pos] = -log(genrand_real1());
-				sum += h->ss[pos];
-			}
-			for (j = 1; j < h->num_states; j++) {
-				pos = i * h->num_states + j;
-				h->ss[pos] /= sum;
 			}
 		} else {
 			pos = h->num_states + 1;
@@ -146,17 +172,12 @@ void hmm_initialize_random(hmm *h)
 		}
 
 		if (i <= 1) continue;
-		sum = 0;
 		for (k = 0; k < h->num_words; k++) {
 			pos = i * h->num_words + k;
 			h->sw[pos] = -log(genrand_real1());
-			sum += h->sw[pos];
-		}
-		for (k = 0; k < h->num_words; k++) {
-			pos = i * h->num_words + k;
-			h->sw[pos] /= sum;
 		}
 	}
+	hmm_normalize_tables(h, h->ss, h->sw);
 }
 
 static
@@ -193,6 +214,7 @@ int hmm_allocate_dp_tables(hmm *h, unsigned int max_document_length)
 	size_t size;
 
 	hmm_cleanup_dp_tables(h);
+
 	size = (max_document_length + 2) * sizeof(double);
 	h->dps = (double *) xmalloc(size);
 	if (!h->dps) return FALSE;
@@ -211,23 +233,24 @@ int hmm_allocate_dp_tables(hmm *h, unsigned int max_document_length)
 }
 
 static
-void hmm_compute_dp_tables(hmm *h, const docinfo *doc, unsigned int doc_idx)
+double hmm_compute_dp_tables(hmm *h, const docinfo *doc,
+                             const docinfo_document *document)
 {
-	docinfo_document *document;
 	unsigned int i, j, k, l;
 	unsigned int pos, pos2, pos3, pos4;
+	double likelihood;
 
-	document = docinfo_get_document(doc, doc_idx);
-
+	likelihood = 0;
 	h->dps[0] = 1;
 	memset(h->dps_s, 0, h->num_states * sizeof(double));
 	h->dps_s[0] = 1;
 	for (i = 1; i <= document->word_count; i++) {
 		h->dps[i] = 0;
-		l = doc->words[document->words + i - 2] - 1;
-		for (j = 2; j < h->num_states; j++) {
+		l = docinfo_get_wordidx_in_doc(doc, document, i) - 1;
+		for (j = 0; j < h->num_states; j++) {
 			pos = i * h->num_states + j;
 			h->dps_s[pos] = 0;
+			if (j == 0 || j == 1) continue;
 			for (k = 0; k < h->num_states; k++) {
 				pos2 = (i - 1) * h->num_states + k;
 				pos3 = k * h->num_states + j;
@@ -237,6 +260,11 @@ void hmm_compute_dp_tables(hmm *h, const docinfo *doc, unsigned int doc_idx)
 			h->dps_s[pos] *= h->sw[pos4];
 			h->dps[i] += h->dps_s[pos];
 		}
+		for (j = 2; j < h->num_states; j++) {
+			pos = i * h->num_states + j;
+			h->dps_s[pos] /= h->dps[i];
+		}
+		likelihood += log(h->dps[i]);
 	}
 	memset(&h->dps_s[i * h->num_states], 0,
 	       h->num_states * sizeof(double));
@@ -247,6 +275,8 @@ void hmm_compute_dp_tables(hmm *h, const docinfo *doc, unsigned int doc_idx)
 		h->dps_s[pos] += h->ss[pos3] * h->dps_s[pos2];
 	}
 	h->dps[i] = h->dps_s[pos];
+	h->dps_s[pos] = 1;
+	likelihood += log(h->dps[i]);
 
 	i = document->word_count + 1;
 	memset(&h->dpe_s[i * h->num_states], 0,
@@ -256,10 +286,11 @@ void hmm_compute_dp_tables(hmm *h, const docinfo *doc, unsigned int doc_idx)
 	h->dpe[i] = 1;
 	for (i = document->word_count; i >= 1; i--) {
 		h->dpe[i] = 0;
-		l = doc->words[document->words + i - 2] - 1;
-		for (j = 2; j < h->num_states; j++) {
+		l = docinfo_get_wordidx_in_doc(doc, document, i) - 1;
+		for (j = 0; j < h->num_states; j++) {
 			pos = i * h->num_states + j;
 			h->dpe_s[pos] = 0;
+			if (j == 0 || j == 1) continue;
 			for (k = 0; k < h->num_states; k++) {
 				pos2 = (i + 1) * h->num_states + k;
 				pos3 = j * h->num_states + k;
@@ -268,6 +299,10 @@ void hmm_compute_dp_tables(hmm *h, const docinfo *doc, unsigned int doc_idx)
 			pos4 = j * h->num_words + l;
 			h->dpe_s[pos] *= h->sw[pos4];
 			h->dpe[i] += h->dpe_s[pos];
+		}
+		for (j = 2; j < h->num_states; j++) {
+			pos = i * h->num_states + j;
+			h->dpe_s[pos] /= h->dpe[i];
 		}
 	}
 	memset(h->dpe_s, 0, h->num_states * sizeof(double));
@@ -278,23 +313,79 @@ void hmm_compute_dp_tables(hmm *h, const docinfo *doc, unsigned int doc_idx)
 		h->dpe_s[pos] += h->ss[pos3] * h->dpe_s[pos2];
 	}
 	h->dpe[0] = h->dpe_s[pos];
-	printf("%g %g\n", h->dps[document->word_count + 1], h->dpe[0]);
+	h->dpe_s[pos] = 1;
+
+	return likelihood;
+}
+
+static
+void hmm_iteration_aux(hmm *h, const docinfo *doc,
+                       const docinfo_document *document)
+{
+	unsigned int i, j, k, l;
+	unsigned int pos, pos2, pos3;
+	double factor;
+
+	factor = h->dps[0] / h->dpe[0];
+	for (i = 1; i <= document->word_count; i++) {
+		l = docinfo_get_wordidx_in_doc(doc, document, i) - 1;
+		factor *= h->dps[i];
+		for (j = 2; j < h->num_states; j++) {
+			pos = i * h->num_states + j;
+			pos2 = j * h->num_words + l;
+			if (h->sw[pos2] < EPS) continue;
+			h->sw2[pos2] += h->dps_s[pos] * h->dpe_s[pos] * factor
+			                / h->sw[pos2];
+		}
+		factor /= h->dpe[i];
+	}
+	factor = 1;
+	for (i = 0; i <= document->word_count; i++) {
+		factor *= h->dps[i] / h->dpe[i];
+		for (j = 0; j < h->num_states; j++) {
+			for (k = 0; k < h->num_states; k++) {
+				pos = i * h->num_states + j;
+				pos2 = (i + 1) * h->num_states + k;
+				pos3 = j * h->num_states + k;
+				h->ss2[pos3] += h->dps_s[pos] * h->dpe_s[pos2]
+				                * h->ss[pos3] * factor;
+			}
+		}
+	}
 }
 
 static
 double hmm_iteration(hmm *h, const docinfo *doc)
 {
-	unsigned int i;
-	for (i = 0; i < docinfo_num_documents(doc); i++) {
-		hmm_compute_dp_tables(h, doc, i + 1);
+	docinfo_document *document;
+	unsigned int d, total_words;
+	double likelihood;
+	size_t size;
+
+	size = h->num_states * h->num_states * sizeof(double);
+	memset(h->ss2, 0, size);
+
+	size = h->num_states * h->num_words * sizeof(double);
+	memset(h->sw2, 0, size);
+
+	likelihood = 0;
+	total_words = 0;
+	for (d = 0; d < docinfo_num_documents(doc); d++) {
+		document = docinfo_get_document(doc, d + 1);
+		total_words += document->word_count;
+		likelihood += hmm_compute_dp_tables(h, doc, document);
+		hmm_iteration_aux(h, doc, document);
 	}
-	return 0;
+	h->ss2[h->num_states + 1] = 1.0;
+	hmm_normalize_tables(h, h->ss2, h->sw2);
+	return likelihood / total_words;
 }
 
 int hmm_train(hmm *h, const docinfo *doc, unsigned int num_states,
               unsigned int max_iterations, double tol)
 {
 	double likelihood, old_likelihood;
+	double *temp;
 	unsigned int iter;
 
 	if (!hmm_allocate_tables(h, docinfo_num_different_words(doc),
@@ -312,8 +403,20 @@ int hmm_train(hmm *h, const docinfo *doc, unsigned int num_states,
 		likelihood = hmm_iteration(h, doc);
 		printf("Iteration %d: likelihood = %g\n",
 		       iter + 1, likelihood);
-		if (fabs(likelihood - old_likelihood) < tol) break;
+
+		if (fabs(likelihood - old_likelihood) < tol) {
+			iter++;
+			break;
+		}
 		old_likelihood = likelihood;
+
+		temp = h->ss;
+		h->ss = h->ss2;
+		h->ss2 = temp;
+
+		temp = h->sw;
+		h->sw = h->sw2;
+		h->sw2 = temp;
 	}
 
 	return TRUE;
@@ -581,8 +684,10 @@ int hmm_build_cached(hmm *h, const char *hmm_file, const docinfo *doc,
 static
 int do_main(const char *docinfo_file, const char *training_file,
             const char *ignore_file, const char *hmm_file,
-            unsigned int num_states, unsigned int max_iter, double tol)
+            unsigned int num_states, unsigned int max_iter, double tol,
+            unsigned int num_generated_texts)
 {
+	unsigned int i;
 	docinfo doc;
 	hmm h;
 
@@ -596,6 +701,15 @@ int do_main(const char *docinfo_file, const char *training_file,
 	if (!hmm_build_cached(&h, hmm_file, &doc,
 	                      num_states, max_iter, tol))
 		goto error_main;
+
+	if (!hmm_optimize_generator(&h))
+		goto error_main;
+
+	for (i = 0; i < num_generated_texts; i++) {
+		printf("Text %u:\n", i + 1);
+		hmm_generate_text(&h, &doc);
+		printf("\n\n");
+	}
 
 	docinfo_cleanup(&doc);
 	hmm_cleanup(&h);
@@ -612,6 +726,7 @@ int main(int argc, char **argv)
 	char *docinfo_file, *hmm_file;
 	char *training_file, *ignore_file;
 	unsigned int num_states, max_iter;
+	unsigned int num_generated_texts;
 	double tol;
 	option opts[] = {
 		{ "-d", NULL, ARGTYPE_FILE,
@@ -628,6 +743,8 @@ int main(int argc, char **argv)
 		  "the maximum number of iterations" },
 		{ "-e", NULL, ARGTYPE_DBL,
 		  "the tolerance for convergence" },
+		{ "-n", NULL, ARGTYPE_UINT,
+		  "the number of generated texts" },
 		{ "--help", NULL, ARGTYPE_NONE,
 		  "print this help" },
 	};
@@ -646,6 +763,7 @@ int main(int argc, char **argv)
 	opts[4].ptr = &num_states;
 	opts[5].ptr = &max_iter;
 	opts[6].ptr = &tol;
+	opts[7].ptr = &num_generated_texts;
 
 	genrand_randomize();
 
@@ -666,7 +784,8 @@ int main(int argc, char **argv)
 	if (ret <= 0) return ret;
 
 	if (!do_main(docinfo_file, training_file, ignore_file,
-	             hmm_file, num_states, max_iter, tol))
+	             hmm_file, num_states, max_iter, tol,
+	             num_generated_texts))
 		return -1;
 
 	return 0;
