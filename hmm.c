@@ -467,39 +467,42 @@ void hmm_optimize_array(hmm *h, double *array, unsigned int size,
                         double *opt_v, unsigned int *opt_i)
 {
 	double thresh;
+	double *td;
+	unsigned int *ti;
 	unsigned int j, l, r;
 
+	ti = h->tmp_i;
+	td = h->tmp_d;
 	thresh = 1.0 / size;
 	for (j = 0; j < size; j++) {
-		h->tmp_i[j] = j;
-		h->tmp_d[j] = array[j];
+		ti[j] = j;
+		td[j] = array[j];
 	}
-	xsort(h->tmp_i, size, sizeof(unsigned int),
-	      &cmp_dbl_indirect, h->tmp_d);
+	xsort(ti, size, sizeof(unsigned int), &cmp_dbl_indirect, td);
 
 	j = 0;
 	l = 0;
 	r = size - 1;
 	while (l < r) {
-		if (h->tmp_d[l] + h->tmp_d[r] < thresh) {
-			opt_v[j] = h->tmp_d[r - 1] / thresh;
-			opt_i[2 * j] = h->tmp_i[r - 1];
-			opt_i[2 * j + 1] = h->tmp_i[r];
-			h->tmp_d[r - 1] += h->tmp_d[r] - thresh;
+		if (td[ti[l]] + td[ti[r]] < thresh) {
+			opt_v[j] = td[ti[r]] / thresh;
+			opt_i[2 * j] = ti[r];
+			opt_i[2 * j + 1] = ti[r - 1];
+			td[ti[r - 1]] += td[ti[r]] - thresh;
 			r--;
 			j++;
 		} else {
-			opt_v[j] = h->tmp_d[l] / thresh;
-			opt_i[2 * j] = h->tmp_i[l];
-			opt_i[2 * j + 1] = h->tmp_i[r];
-			h->tmp_d[r] += h->tmp_d[l] - thresh;
+			opt_v[j] = td[ti[l]] / thresh;
+			opt_i[2 * j] = ti[l];
+			opt_i[2 * j + 1] = ti[r];
+			td[ti[r]] += td[ti[l]] - thresh;
 			l++;
 			j++;
 		}
 	}
 	opt_v[j] = 1.0;
-	opt_i[2 * j] = h->tmp_i[l];
-	opt_i[2 * j + 1] = h->tmp_i[l];
+	opt_i[2 * j] = ti[l];
+	opt_i[2 * j + 1] = ti[l];
 }
 
 static
@@ -681,6 +684,34 @@ int hmm_load_easy(hmm *h, const char *filename)
 	return ret;
 }
 
+void hmm_print(const hmm *h, const docinfo *doc)
+{
+	unsigned int i, j, k, pos;
+
+	printf("\nTrained HMM:\n");
+	printf("SS:\n");
+	for (i = 0; i < h->num_states; i++) {
+		for (j = 0; j < h->num_states; j++) {
+			pos = i * h->num_states + j;
+			printf("%.3f ", h->ss[pos]);
+		}
+		printf("\n");
+	}
+	printf("SW:\n");
+	for (i = 0; i < h->num_states; i++) {
+		for (k = 0; k < h->num_words; k++) {
+			pos = i * h->num_words + k;
+			printf("%.3f ", h->sw[pos]);
+		}
+		printf("\n");
+	}
+	printf("Words:\n");
+	for (k = 0; k < h->num_words; k++) {
+		printf("%s ", docinfo_get_word(doc, k + 1));
+	}
+	printf("\n");
+}
+
 int hmm_build_cached(hmm *h, const char *hmm_file, const docinfo *doc,
                      unsigned int num_states, unsigned int max_iter,
                      double tol)
@@ -711,6 +742,9 @@ int hmm_build_cached(hmm *h, const char *hmm_file, const docinfo *doc,
 			hmm_cleanup(h);
 			return FALSE;
 		}
+	}
+	if (h->num_states < 10) {
+		hmm_print(h, doc);
 	}
 
 	return TRUE;

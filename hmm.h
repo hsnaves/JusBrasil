@@ -43,4 +43,9 @@ int hmm_save_easy(const hmm *h, const char *filename);
 int hmm_load(hmm *h, FILE *fp);
 int hmm_load_easy(hmm *h, const char *filename);
 
+void hmm_print(const hmm *h, const docinfo *doc);
+int hmm_build_cached(hmm *h, const char *hmm_file, const docinfo *doc,
+                     unsigned int num_states, unsigned int max_iter,
+                     double tol);
+
 #endif /* __HMM_H */
