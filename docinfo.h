@@ -60,9 +60,13 @@ unsigned int docinfo_num_wordstats(const docinfo *doc);
 docinfo_wordstats *docinfo_get_wordstats(const docinfo *doc, unsigned int idx);
 docinfo_document *docinfo_get_document(const docinfo *doc, unsigned int idx);
 const char *docinfo_get_word(const docinfo *doc, unsigned int idx);
+unsigned int docinfo_get_wordidx_in_doc(const docinfo *doc,
+                                        const docinfo_document *document,
+                                        unsigned int idx);
 const char *docinfo_get_word_in_doc(const docinfo *doc,
                                     const docinfo_document *document,
                                     unsigned int idx);
+
 unsigned int docinfo_get_max_document_length(const docinfo *doc);
 
 int docinfo_save(const docinfo *doc, FILE *fp);

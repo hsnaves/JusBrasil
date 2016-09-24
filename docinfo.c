@@ -334,12 +334,19 @@ const char *docinfo_get_word(const docinfo *doc, unsigned int idx)
 	return hashtable_str(&doc->ht, entry);
 }
 
+unsigned int docinfo_get_wordidx_in_doc(const docinfo *doc,
+                                        const docinfo_document *document,
+                                        unsigned int idx)
+{
+	return doc->words[document->words + idx - 2];
+}
+
 const char *docinfo_get_word_in_doc(const docinfo *doc,
                                     const docinfo_document *document,
                                     unsigned int idx)
 {
 	unsigned int word;
-	word = doc->words[document->words + idx - 2];
+	word = docinfo_get_wordidx_in_doc(doc, document, idx);
 	return docinfo_get_word(doc, word);
 }
 

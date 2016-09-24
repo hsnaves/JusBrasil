@@ -96,8 +96,8 @@ void plsa_initialize_random(plsa *pl, int retrain_dt)
 }
 
 static
-double plsa_iteration(plsa *pl, const docinfo *doc, double *dt, double *tw,
-                      double *dt_old, double *tw_old)
+double plsa_iteration(plsa *pl, const docinfo *doc,
+                      int update_dt, int update_tw)
 {
 	unsigned pos, pos2;
 	unsigned int i, j, k, l, num_wordstats;
@@ -106,14 +106,14 @@ double plsa_iteration(plsa *pl, const docinfo *doc, double *dt, double *tw,
 	docinfo_document *document;
 	size_t size;
 
-	if (dt) {
+	if (update_dt) {
 		size = pl->num_documents * pl->num_topics * sizeof(double);
-		memset(dt, 0, size);
+		memset(pl->dt2, 0, size);
 	}
 
-	if (tw) {
+	if (update_tw) {
 		size = pl->num_topics * pl->num_words * sizeof(double);
-		memset(tw, 0, size);
+		memset(pl->tw2, 0, size);
 	}
 
 	likelihood = 0;
@@ -128,7 +128,7 @@ double plsa_iteration(plsa *pl, const docinfo *doc, double *dt, double *tw,
 		for (j = 0; j < pl->num_topics; j++) {
 			pos = k * pl->num_topics + j;
 			pos2 = j * pl->num_words + i;
-			dotprod += dt_old[pos] * tw_old[pos2];
+			dotprod += pl->dt[pos] * pl->tw[pos2];
 		}
 		likelihood += wordstats->count * log(dotprod);
 		total_weight += wordstats->count;
@@ -136,22 +136,25 @@ double plsa_iteration(plsa *pl, const docinfo *doc, double *dt, double *tw,
 		for (j = 0; j < pl->num_topics; j++) {
 			pos = k * pl->num_topics + j;
 			pos2 = j * pl->num_words + i;
-			val = wordstats->count * dt_old[pos]
-			        * tw_old[pos2] / dotprod;
-			if (dt) dt[pos] += val / document->word_count;
-			if (tw) tw[pos2] += val;
+			val = wordstats->count * pl->dt[pos]
+			        * pl->tw[pos2] / dotprod;
+			if (update_dt)
+				pl->dt2[pos] += val / document->word_count;
+			if (update_tw)
+				pl->tw2[pos2] += val;
 		}
 	}
-	if (tw) {
+
+	if (update_tw) {
 		for (j = 0; j < pl->num_topics; j++) {
 			sum = 0;
 			for (i = 0; i < pl->num_words; i++) {
 				pos2 = j * pl->num_words + i;
-				sum += tw[pos2];
+				sum += pl->tw2[pos2];
 			}
 			for (i = 0; i < pl->num_words; i++) {
 				pos2 = j * pl->num_words + i;
-				tw[pos2] /= sum;
+				pl->tw2[pos2] /= sum;
 			}
 		}
 	}
@@ -220,9 +223,8 @@ int plsa_train(plsa *pl, const docinfo *doc, unsigned int num_topics,
                unsigned int max_iterations, double tol, int retrain_dt)
 {
 	double likelihood, old_likelihood;
-	double *dt, *tw, *dt_old, *tw_old;
+	double *temp;
 	unsigned int iter;
-	size_t size;
 
 	if (!plsa_allocate_tables(pl, docinfo_num_different_words(doc),
 	                          docinfo_num_documents(doc), num_topics))
@@ -233,28 +235,7 @@ int plsa_train(plsa *pl, const docinfo *doc, unsigned int num_topics,
 	old_likelihood = 100 * tol;
 	printf("Running PLSA on data...\n");
 	for (iter = 0; iter < max_iterations; iter++) {
-		if (iter & 1) {
-			dt = pl->dt;
-			dt_old = pl->dt2;
-			if (retrain_dt) {
-				tw = NULL;
-				tw_old = pl->tw;
-			} else {
-				tw = pl->tw;
-				tw_old = pl->tw2;
-			}
-		} else {
-			dt = pl->dt2;
-			dt_old = pl->dt;
-			if (retrain_dt) {
-				tw = NULL;
-				tw_old = pl->tw;
-			} else {
-				tw = pl->tw2;
-				tw_old = pl->tw;
-			}
-		}
-		likelihood = plsa_iteration(pl, doc, dt, tw, dt_old, tw_old);
+		likelihood = plsa_iteration(pl, doc, TRUE, !retrain_dt);
 		printf("Iteration %d: likelihood = %g\n",
 		       iter + 1, likelihood);
 
@@ -263,14 +244,15 @@ int plsa_train(plsa *pl, const docinfo *doc, unsigned int num_topics,
 			break;
 		}
 		old_likelihood = likelihood;
-	}
-	if (iter & 1) {
-		size = pl->num_documents * pl->num_topics * sizeof(double);
-		memcpy(pl->dt, pl->dt2, size);
+
+		temp = pl->dt;
+		pl->dt = pl->dt2;
+		pl->dt2 = temp;
 
 		if (!retrain_dt) {
-			size = pl->num_topics * pl->num_words * sizeof(double);
-			memcpy(pl->tw, pl->tw2, size);
+			temp = pl->tw;
+			pl->tw = pl->tw2;
+			pl->tw2 = temp;
 		}
 	}
 	return TRUE;
