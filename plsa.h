@@ -17,6 +17,7 @@ struct plsa_st {
 	unsigned int num_words;
 	unsigned int num_documents;
 	unsigned int num_topics;
+	double likelihood, old_likelihood;
 	plsa_topmost *top;
 	double *dt, *tw;
 	double *dt2, *tw2;
@@ -28,7 +29,8 @@ int plsa_initialize(plsa *pl);
 void plsa_cleanup(plsa *pl);
 
 int plsa_train(plsa *pl, const docinfo *doc, unsigned int num_topics,
-               unsigned int max_iterations, double tol, int retrain_dt);
+               unsigned int max_iterations, double tol, int retrain_dt,
+               const char *plsa_filename);
 int plsa_print_topics(plsa *pl, const docinfo *doc, unsigned top_words);
 int plsa_print_documents(plsa *pl, const docinfo *doc, unsigned top_topics);
 

@@ -12,6 +12,7 @@ struct hmm_st {
 	unsigned int num_words;
 	unsigned int num_documents;
 	unsigned int num_states;
+	double likelihood, old_likelihood;
 
 	double *ss, *ss2;
 	double *sw, *sw2;
@@ -32,7 +33,8 @@ int hmm_initialize(hmm *h);
 void hmm_cleanup(hmm *h);
 
 int hmm_train(hmm *h, const docinfo *doc, unsigned int num_states,
-              unsigned int max_iterations, double tol);
+              unsigned int max_iterations, double tol,
+              const char *hmm_filename);
 int hmm_optimize_generator(hmm *h);
 void hmm_generate_text(const hmm *h, const docinfo *doc);
 

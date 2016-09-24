@@ -22,6 +22,8 @@ void plsa_reset(plsa *pl)
 int plsa_initialize(plsa *pl)
 {
 	plsa_reset(pl);
+	pl->likelihood = 1;
+	pl->old_likelihood = 1;
 	return TRUE;
 }
 
@@ -220,30 +222,33 @@ int plsa_allocate_tables(plsa *pl, unsigned int num_words,
 }
 
 int plsa_train(plsa *pl, const docinfo *doc, unsigned int num_topics,
-               unsigned int max_iterations, double tol, int retrain_dt)
+               unsigned int max_iterations, double tol, int retrain_dt,
+               const char *plsa_filename)
 {
-	double likelihood, old_likelihood;
-	double *temp;
 	unsigned int iter;
+	double *temp;
 
 	if (!plsa_allocate_tables(pl, docinfo_num_different_words(doc),
 	                          docinfo_num_documents(doc), num_topics))
 		return FALSE;
 
-	plsa_initialize_random(pl, retrain_dt);
+	if (retrain_dt) {
+		pl->likelihood = 1;
+		pl->old_likelihood = 1;
+	}
 
-	old_likelihood = 100 * tol;
+	if (pl->likelihood >= 0)
+		plsa_initialize_random(pl, retrain_dt);
+	else if (fabs(pl->likelihood - pl->old_likelihood) < tol) {
+		return TRUE;
+	}
+
 	printf("Running PLSA on data...\n");
 	for (iter = 0; iter < max_iterations; iter++) {
-		likelihood = plsa_iteration(pl, doc, TRUE, !retrain_dt);
+		pl->old_likelihood = pl->likelihood;
+		pl->likelihood = plsa_iteration(pl, doc, TRUE, !retrain_dt);
 		printf("Iteration %d: likelihood = %g\n",
-		       iter + 1, likelihood);
-
-		if (fabs(likelihood - old_likelihood) < tol) {
-			iter++;
-			break;
-		}
-		old_likelihood = likelihood;
+		       iter + 1, pl->likelihood);
 
 		temp = pl->dt;
 		pl->dt = pl->dt2;
@@ -253,6 +258,18 @@ int plsa_train(plsa *pl, const docinfo *doc, unsigned int num_topics,
 			temp = pl->tw;
 			pl->tw = pl->tw2;
 			pl->tw2 = temp;
+
+			if ((iter % 10) == 9 && plsa_filename) {
+				printf("Saving PLSA `%s'...\n", plsa_filename);
+				if (!plsa_save_easy(pl, plsa_filename))
+					return FALSE;
+			}
+		}
+
+
+		if (pl->old_likelihood < 0 &&
+		    fabs(pl->likelihood - pl->old_likelihood) < tol) {
+			break;
 		}
 	}
 	return TRUE;
@@ -355,6 +372,10 @@ int plsa_save(const plsa *pl, FILE *fp)
 		return FALSE;
 	if (fwrite(&pl->num_topics, sizeof(unsigned int), 1, fp) != 1)
 		return FALSE;
+	if (fwrite(&pl->likelihood, sizeof(double), 1, fp) != 1)
+		return FALSE;
+	if (fwrite(&pl->old_likelihood, sizeof(double), 1, fp) != 1)
+		return FALSE;
 
 	nmemb = pl->num_documents * pl->num_topics;
 	if (fwrite(pl->dt, sizeof(double), nmemb, fp) != nmemb)
@@ -396,6 +417,10 @@ int plsa_load(plsa *pl, FILE *fp)
 		return FALSE;
 	if (fread(&num_topics, sizeof(unsigned int), 1, fp) != 1)
 		return FALSE;
+	if (fread(&pl->likelihood, sizeof(double), 1, fp) != 1)
+		return FALSE;
+	if (fread(&pl->old_likelihood, sizeof(double), 1, fp) != 1)
+		return FALSE;
 
 	if (!plsa_allocate_tables(pl, num_words, num_documents, num_topics))
 		goto error_load;
@@ -435,24 +460,23 @@ int plsa_build_cached(plsa *pl, const char *plsa_file, const docinfo *doc,
                       unsigned int num_topics, unsigned int max_iter,
                       double tol)
 {
-	FILE *fp;
+	FILE *fp = NULL;
 	int ret;
 
 	plsa_reset(pl);
-	if (plsa_file) {
-		fp = fopen(plsa_file, "rb");
-		if (fp) {
-			printf("Loading PLSA `%s'...\n", plsa_file);
-			ret = plsa_load(pl, fp);
-			fclose(fp);
-			return ret;
-		}
+	if (plsa_file) fp = fopen(plsa_file, "rb");
+	if (fp) {
+		printf("Loading PLSA `%s'...\n", plsa_file);
+		ret = plsa_load(pl, fp);
+		fclose(fp);
+		if (!ret) return FALSE;
+	} else {
+		if (!plsa_initialize(pl))
+			return FALSE;
 	}
 
-	if (!plsa_initialize(pl))
-		return FALSE;
-
-	if (!plsa_train(pl, doc, num_topics, max_iter, tol, FALSE)) {
+	if (!plsa_train(pl, doc, num_topics, max_iter, tol,
+	                FALSE, plsa_file)) {
 		plsa_cleanup(pl);
 		return FALSE;
 	}
@@ -499,7 +523,8 @@ int do_main(const char *docinfo_file, const char *training_file,
 		if (!docinfo_process_file(&doc, test_file, FALSE))
 			goto error_main;
 
-		if (!plsa_train(&pl, &doc, num_topics, max_iter, tol, TRUE))
+		if (!plsa_train(&pl, &doc, num_topics, max_iter, tol,
+		                TRUE, NULL))
 			goto error_main;
 
 		if (top_topics > 0) {

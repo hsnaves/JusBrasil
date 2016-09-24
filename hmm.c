@@ -35,6 +35,8 @@ void hmm_reset(hmm *h)
 int hmm_initialize(hmm *h)
 {
 	hmm_reset(h);
+	h->likelihood = 1;
+	h->old_likelihood = 1;
 	return TRUE;
 }
 
@@ -186,24 +188,43 @@ int hmm_allocate_tables(hmm *h, unsigned int num_words,
 {
 	size_t size;
 
-	hmm_cleanup_tables(h);
+	if (h->num_states != num_states) {
+		hmm_cleanup_tables(h);
+	} else if (h->num_words != num_words) {
+		if (h->sw) {
+			free(h->sw);
+			h->sw = NULL;
+		}
+		if (h->sw2) {
+			free(h->sw2);
+			h->sw2 = NULL;
+		}
+	}
 	h->num_documents = num_documents;
 	h->num_words = num_words;
 	h->num_states = num_states;
 
 	size = num_states * num_states * sizeof(double);
-	h->ss = (double *) xmalloc(size);
-	if (!h->ss) return FALSE;
+	if (!h->ss) {
+		h->ss = (double *) xmalloc(size);
+		if (!h->ss) return FALSE;
+	}
 
-	h->ss2 = (double *) xmalloc(size);
-	if (!h->ss2) return FALSE;
+	if (!h->ss2) {
+		h->ss2 = (double *) xmalloc(size);
+		if (!h->ss2) return FALSE;
+	}
 
 	size = num_states * h->num_words * sizeof(double);
-	h->sw = (double *) xmalloc(size);
-	if (!h->sw) return FALSE;
+	if (!h->sw) {
+		h->sw = (double *) xmalloc(size);
+		if (!h->sw) return FALSE;
+	}
 
-	h->sw2 = (double *) xmalloc(size);
-	if (!h->sw2) return FALSE;
+	if (!h->sw2) {
+		h->sw2 = (double *) xmalloc(size);
+		if (!h->sw2) return FALSE;
+	}
 
 	return TRUE;
 }
@@ -382,11 +403,11 @@ double hmm_iteration(hmm *h, const docinfo *doc)
 }
 
 int hmm_train(hmm *h, const docinfo *doc, unsigned int num_states,
-              unsigned int max_iterations, double tol)
+              unsigned int max_iterations, double tol,
+              const char *hmm_filename)
 {
-	double likelihood, old_likelihood;
-	double *temp;
 	unsigned int iter;
+	double *temp;
 
 	if (!hmm_allocate_tables(h, docinfo_num_different_words(doc),
 	                         docinfo_num_documents(doc), num_states))
@@ -395,20 +416,18 @@ int hmm_train(hmm *h, const docinfo *doc, unsigned int num_states,
 	if (!hmm_allocate_dp_tables(h, docinfo_get_max_document_length(doc)))
 		return FALSE;
 
-	hmm_initialize_random(h);
+	if (h->likelihood >= 0)
+		hmm_initialize_random(h);
+	else if (fabs(h->likelihood - h->old_likelihood) < tol) {
+		return TRUE;
+	}
 
-	old_likelihood = 100 * tol;
 	printf("Training HMM on data...\n");
 	for (iter = 0; iter < max_iterations; iter++) {
-		likelihood = hmm_iteration(h, doc);
+		h->old_likelihood = h->likelihood;
+		h->likelihood = hmm_iteration(h, doc);
 		printf("Iteration %d: likelihood = %g\n",
-		       iter + 1, likelihood);
-
-		if (fabs(likelihood - old_likelihood) < tol) {
-			iter++;
-			break;
-		}
-		old_likelihood = likelihood;
+		       iter + 1, h->likelihood);
 
 		temp = h->ss;
 		h->ss = h->ss2;
@@ -417,6 +436,16 @@ int hmm_train(hmm *h, const docinfo *doc, unsigned int num_states,
 		temp = h->sw;
 		h->sw = h->sw2;
 		h->sw2 = temp;
+
+		if ((iter % 10) == 9 && hmm_filename) {
+			printf("Saving HMM `%s'...\n", hmm_filename);
+			if (!hmm_save_easy(h, hmm_filename))
+				return FALSE;
+		}
+
+		if (h->old_likelihood < 0
+		    && fabs(h->likelihood - h->old_likelihood) < tol)
+			break;
 	}
 
 	return TRUE;
@@ -568,6 +597,10 @@ int hmm_save(const hmm *h, FILE *fp)
 		return FALSE;
 	if (fwrite(&h->num_states, sizeof(unsigned int), 1, fp) != 1)
 		return FALSE;
+	if (fwrite(&h->likelihood, sizeof(double), 1, fp) != 1)
+		return FALSE;
+	if (fwrite(&h->old_likelihood, sizeof(double), 1, fp) != 1)
+		return FALSE;
 
 	nmemb = h->num_states * h->num_states;
 	if (fwrite(h->ss, sizeof(double), nmemb, fp) != nmemb)
@@ -609,6 +642,10 @@ int hmm_load(hmm *h, FILE *fp)
 		return FALSE;
 	if (fread(&num_states, sizeof(unsigned int), 1, fp) != 1)
 		return FALSE;
+	if (fread(&h->likelihood, sizeof(double), 1, fp) != 1)
+		return FALSE;
+	if (fread(&h->old_likelihood, sizeof(double), 1, fp) != 1)
+		return FALSE;
 
 	if (!hmm_allocate_tables(h, num_words, num_documents, num_states))
 		return FALSE;
@@ -648,24 +685,22 @@ int hmm_build_cached(hmm *h, const char *hmm_file, const docinfo *doc,
                      unsigned int num_states, unsigned int max_iter,
                      double tol)
 {
-	FILE *fp;
+	FILE *fp = NULL;
 	int ret;
 
 	hmm_reset(h);
-	if (hmm_file) {
-		fp = fopen(hmm_file, "rb");
-		if (fp) {
-			printf("Loading HMM `%s'...\n", hmm_file);
-			ret = hmm_load(h, fp);
-			fclose(fp);
-			return ret;
-		}
+	if (hmm_file) fp = fopen(hmm_file, "rb");
+	if (fp) {
+		printf("Loading HMM `%s'...\n", hmm_file);
+		ret = hmm_load(h, fp);
+		fclose(fp);
+		if (!ret) return FALSE;
+	} else {
+		if (!hmm_initialize(h))
+			return FALSE;
 	}
 
-	if (!hmm_initialize(h))
-		return FALSE;
-
-	if (!hmm_train(h, doc, num_states, max_iter, tol)) {
+	if (!hmm_train(h, doc, num_states, max_iter, tol, hmm_file)) {
 		hmm_cleanup(h);
 		return FALSE;
 	}
