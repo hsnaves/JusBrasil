@@ -438,7 +438,7 @@ int hmm_train(hmm *h, const docinfo *doc, unsigned int num_states,
 		h->sw2 = temp;
 
 		if ((iter % 10) == 9 && hmm_filename) {
-			printf("Saving HMM `%s'...\n", hmm_filename);
+			printf("Saving temporary HMM `%s'...\n", hmm_filename);
 			if (!hmm_save_easy(h, hmm_filename))
 				return FALSE;
 		}
@@ -446,6 +446,11 @@ int hmm_train(hmm *h, const docinfo *doc, unsigned int num_states,
 		if (h->old_likelihood < 0
 		    && fabs(h->likelihood - h->old_likelihood) < tol)
 			break;
+	}
+	if (hmm_filename) {
+		printf("Saving HMM `%s'...\n", hmm_filename);
+		if (!hmm_save_easy(h, hmm_filename))
+			return FALSE;
 	}
 
 	return TRUE;
@@ -736,13 +741,6 @@ int hmm_build_cached(hmm *h, const char *hmm_file, const docinfo *doc,
 		return FALSE;
 	}
 
-	if (hmm_file) {
-		printf("Saving HMM `%s'...\n", hmm_file);
-		if (!hmm_save_easy(h, hmm_file)) {
-			hmm_cleanup(h);
-			return FALSE;
-		}
-	}
 	if (h->num_states < 10) {
 		hmm_print(h, doc);
 	}

@@ -260,7 +260,8 @@ int plsa_train(plsa *pl, const docinfo *doc, unsigned int num_topics,
 			pl->tw2 = temp;
 
 			if ((iter % 10) == 9 && plsa_filename) {
-				printf("Saving PLSA `%s'...\n", plsa_filename);
+				printf("Saving temporary PLSA `%s'...\n",
+				       plsa_filename);
 				if (!plsa_save_easy(pl, plsa_filename))
 					return FALSE;
 			}
@@ -270,6 +271,12 @@ int plsa_train(plsa *pl, const docinfo *doc, unsigned int num_topics,
 		if (pl->old_likelihood < 0 &&
 		    fabs(pl->likelihood - pl->old_likelihood) < tol) {
 			break;
+		}
+	}
+	if (plsa_filename) {
+		printf("Saving PLSA `%s'...\n", plsa_filename);
+		if (!plsa_save_easy(pl, plsa_filename)) {
+			return FALSE;
 		}
 	}
 	return TRUE;
@@ -479,14 +486,6 @@ int plsa_build_cached(plsa *pl, const char *plsa_file, const docinfo *doc,
 	                FALSE, plsa_file)) {
 		plsa_cleanup(pl);
 		return FALSE;
-	}
-
-	if (plsa_file) {
-		printf("Saving PLSA `%s'...\n", plsa_file);
-		if (!plsa_save_easy(pl, plsa_file)) {
-			plsa_cleanup(pl);
-			return FALSE;
-		}
 	}
 
 	return TRUE;
